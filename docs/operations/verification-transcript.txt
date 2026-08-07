@@ -4,7 +4,7 @@
 ===================================================================
 
 PROVENANCE
-  Code commit under test: 6e0b3e182b5c38989b677e841645e4acc0efc0ad
+  Code commit under test: 77750d508f47cbe5fa08c2c51e113c7e4909df10
   TWO clean clones of that ONE commit are used:
     A) Darwin 25.5.0 arm64, node v24.12.0 — sections 1-9
     B) Linux, docker node:22-bookworm-slim — section 10
@@ -13,9 +13,9 @@ PROVENANCE
   artifact of the commit and is NOT regenerated during verification.
   A transcript is a tracked file, so it can never name the commit that
   contains it: committing it moves HEAD. The claim that matters is that
-  nothing since 6e0b3e1 touches code, and it is checked rather than asserted:
+  nothing since 77750d5 touches code, and it is checked rather than asserted:
     node scripts/check-transcript-provenance.mjs
-  date: 2026-08-07T03:39:38Z
+  date: 2026-08-07T03:42:27Z
   Uncommitted in the source tree at generation time:
      M docs/operations/verification-transcript.txt
 
@@ -25,13 +25,12 @@ ls: packages/capmap-cli/dist: No such file or directory
 
 $ pnpm install --frozen-lockfile
 Scope: all 5 workspace projects
-(node:26217) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(node:30681) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
 (Use `node --trace-deprecation ...` to show where the warning was created)
 Lockfile is up to date, resolution step is skipped
 Progress: resolved 1, reused 0, downloaded 0, added 0
 Packages: +339
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-Progress: resolved 339, reused 339, downloaded 0, added 246
 Progress: resolved 339, reused 339, downloaded 0, added 339, done
 
 devDependencies:
@@ -44,11 +43,11 @@ devDependencies:
 + typescript-eslint 8.65.0
 + vitest 2.1.9
 
-Done in 2.9s
+Done in 1.3s
 exit 0
 
 $ ls -l node_modules/.bin/capmap
--rwxr-xr-x@ 1 olorin  staff  2240 Aug  6 23:39 node_modules/.bin/capmap
+-rwxr-xr-x@ 1 olorin  staff  2240 Aug  6 23:42 node_modules/.bin/capmap
   ok   capmap linked by install alone
 
 $ pnpm -r build
@@ -59,8 +58,8 @@ hooks build$ tsc -b
 packages/capmap-cli build$ tsc -b
 packages/capmap-mcp build$ tsc -b
 hooks build: Done
-packages/capmap-mcp build: Done
 packages/capmap-cli build: Done
+packages/capmap-mcp build: Done
 exit 0
 
 $ the four entry points exist
@@ -76,13 +75,13 @@ exit 0
 === 2. QUALITY GATES ===
 $ pnpm typecheck
 
-> capability-map@ typecheck /private/var/folders/f5/8hvwmyw14_981msrd_nqrb_w0000gn/T/tmp.Ql8BfxVq3S/capmap-verify
+> capability-map@ typecheck /private/var/folders/f5/8hvwmyw14_981msrd_nqrb_w0000gn/T/tmp.oojJd6K54o/capmap-verify
 > tsc -b && tsc --noEmit -p tsconfig.test.json
 exit 0
 
 $ pnpm lint
 
-> capability-map@ lint /private/var/folders/f5/8hvwmyw14_981msrd_nqrb_w0000gn/T/tmp.Ql8BfxVq3S/capmap-verify
+> capability-map@ lint /private/var/folders/f5/8hvwmyw14_981msrd_nqrb_w0000gn/T/tmp.oojJd6K54o/capmap-verify
 > eslint .
 exit 0
 
@@ -135,7 +134,7 @@ vendor-toolkit: 1 packages, 0 minor
 warning: 0 domain entries is outside the configured band 1..20; run enrichment to populate the domain layer
 exit 0
 $ node scripts/report-index.mjs --scanned-without-enrichment   (in the scratch directory)
-generatedAt: 2026-08-07T03:41:53.939Z
+generatedAt: 2026-08-07T03:43:45.686Z
 root: example/estate
 schema: index.json and 3 repo files validated against @capmap/core
 repos: 3 in the manifest, 3 configured, 3 files on disk — 0 missing, 0 unexpected, 0 without a file, 0 orphan file(s)
@@ -173,7 +172,7 @@ exit 0
 
 === 5a. HOOK LATENCY (criterion 8, cost) ===
 $ node scripts/hook-latency.mjs
-hook 62.3ms   bare node 34.6ms   own work 27.7ms   ratio 0.80
+hook 41.6ms   bare node 24.8ms   own work 16.8ms   ratio 0.68
 budget: own work under 100ms — met
 exit 0
 
