@@ -64,7 +64,7 @@ jobs:
         run: node scripts/check-transcript-provenance.mjs
 
       # Every step above reports that a check passed. This one reports that the
-      # checks can fail: twelve deliberate breakages of a copied index, source
+      # checks can fail: thirteen deliberate breakages of a copied index, source
       # tree or hook configuration, each of which must be noticed — and each
       # required to pass on the unbroken input first, so a checker that was
       # already failing cannot masquerade as a detection.
