@@ -67,6 +67,10 @@ mkdir -p "$DRIFT"
 SCRATCH_DIRS+=("$DRIFT_PARENT")
 cp -R "$CLONE/config" "$DRIFT/config"
 cp -R "$CLONE/index" "$DRIFT/index"
+# The estate root in scan.config.json is relative, so the estate has to sit
+# beside the index here. Without it every capability fails for a missing tree
+# and the section "detects" drift it did not cause.
+cp -R "$CLONE/example" "$DRIFT/example"
 DRIFT_TARGET="$(node -e '
 const { readFileSync, writeFileSync, readdirSync } = require("node:fs");
 const dir = process.argv[1] + "/index/repos";
