@@ -1,0 +1,22 @@
+{
+  "repos": [
+    {
+      "id": "alpha",
+      "path": "alpha",
+      "tier": "core",
+      "vcs": "none"
+    },
+    {
+      "id": "beta",
+      "path": "beta",
+      "tier": "active",
+      "vcs": "none"
+    },
+    {
+      "id": "vendor-toolkit",
+      "path": "vendor-toolkit",
+      "tier": "external",
+      "vcs": "none"
+    }
+  ]
+}

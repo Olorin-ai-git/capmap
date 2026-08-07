@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+
+# Incremental build metadata. Tracking this while dist/ is ignored made a clean
+# checkout report every project up to date and emit nothing, so the CLI, MCP
+# server and hook binaries were simply absent after a build that claimed success.
+*.tsbuildinfo
+
+# Ruff cache from a Python package in the estate fixture set.
+.ruff_cache/
+
+# Gate records carry the absolute path of the specification they were produced
+# for, so they are per-checkout. `capmap gate` regenerates them.
+.capmap/

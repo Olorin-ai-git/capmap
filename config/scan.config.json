@@ -1,0 +1,97 @@
+{
+  "root": "example/estate",
+  "excludePaths": [
+    ".claude",
+    ".cursor",
+    ".firebase",
+    ".git",
+    ".gradle",
+    ".next",
+    ".obsidian",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".specify",
+    ".superpowers",
+    ".terraform",
+    ".turbo",
+    ".venv",
+    ".worktrees",
+    "Pods",
+    "__pycache__",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+    "vendor",
+    "venv"
+  ],
+  "excludeRepoGlobs": [
+    "*-wt",
+    "*-worktrees",
+    "_archive",
+    "docs"
+  ],
+  "internalScopes": [
+    "@alpha/",
+    "@beta/",
+    "@vendor/"
+  ],
+  "significance": {
+    "threshold": 0.45,
+    "weights": {
+      "publishedOrExported": 0.2,
+      "internalConsumers": 0.2,
+      "deployTarget": 0.15,
+      "tests": 0.15,
+      "readme": 0.1,
+      "sourceSize": 0.1,
+      "commitRecency": 0.1
+    },
+    "consumerSaturation": 8,
+    "locSaturation": 5000,
+    "recencyHalfLifeDays": 365
+  },
+  "maturity": {
+    "gaRecencyDays": 180
+  },
+  "verdicts": {
+    "reuseThreshold": 0.7,
+    "extendThreshold": 0.5,
+    "duplicationThreshold": 0.3
+  },
+  "matching": {
+    "maxCandidates": 10,
+    "model": "claude-opus-5",
+    "effort": "high",
+    "selectMaxTokens": 6000,
+    "rankMaxTokens": 4000
+  },
+  "enrichment": {
+    "model": "claude-sonnet-5",
+    "effort": "medium",
+    "maxRetries": 2,
+    "concurrency": 8,
+    "packageMaxTokens": 512,
+    "domainMaxTokens": 4096,
+    "maxPackagesPerDomainCall": 25
+  },
+  "hook": {
+    "specGlobs": [
+      "**/docs/superpowers/specs/**",
+      "**/specs/**"
+    ],
+    "planGlobs": [
+      "**/plans/**",
+      "**/docs/**/plan*.md"
+    ]
+  },
+  "index": {
+    "dir": "index"
+  },
+  "expectedCounts": {
+    "domainsMin": 1,
+    "domainsMax": 20,
+    "packagesMin": 4,
+    "packagesMax": 40
+  }
+}

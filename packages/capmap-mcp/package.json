@@ -1,0 +1,16 @@
+{
+  "name": "@capmap/mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "capmap-mcp": "./dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@capmap/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@anthropic-ai/sdk": "^0.32.0"
+  }
+}

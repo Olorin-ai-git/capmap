@@ -1,0 +1,98 @@
+import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import {
+  GATE_SCHEMA_VERSION,
+  GateRecordSchema,
+  type GateRecord,
+} from "../model/gate-schema.js";
+
+/**
+ * Re-exported so callers of `@capmap/core` name gate records exactly as the hook does. The
+ * hook carries its own copy at `hooks/src/feature-id.ts`; `test/gate/feature-id.test.ts`
+ * holds the two implementations to the same behaviour.
+ */
+export { deriveFeatureId } from "./feature-id.js";
+
+const GATE_DIR_NAME = ".capmap";
+const GIT_DIR_NAME = ".git";
+const JSON_INDENT = 2;
+const WRITE_SUFFIX = ".writing";
+const MISSING_FILE_CODE = "ENOENT";
+
+/**
+ * Directory holding gate records for a document: `.capmap` under the nearest ancestor that
+ * contains a `.git` entry, falling back to `.capmap` beside the document itself.
+ */
+export async function resolveGateDir(fileAbsPath: string): Promise<string> {
+  const fileDir = dirname(fileAbsPath);
+  let current = fileDir;
+  for (;;) {
+    try {
+      await access(join(current, GIT_DIR_NAME));
+      return join(current, GATE_DIR_NAME);
+    } catch {
+      /* not a repository root — keep walking up */
+    }
+    const parent = dirname(current);
+    if (parent === current) return join(fileDir, GATE_DIR_NAME);
+    current = parent;
+  }
+}
+
+function recordPath(dirAbs: string, feature: string): string {
+  return join(dirAbs, `gate-${feature}.json`);
+}
+
+function isMissingFile(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as NodeJS.ErrnoException).code === MISSING_FILE_CODE
+  );
+}
+
+/**
+ * Persist a gate record, returning its path. The write lands on a sibling staging file and
+ * is renamed into place, so a reader never observes a half-written record.
+ */
+export async function writeGateRecord(
+  dirAbs: string,
+  record: GateRecord,
+): Promise<string> {
+  await mkdir(dirAbs, { recursive: true });
+  const path = recordPath(dirAbs, record.feature);
+  const staging = `${path}${WRITE_SUFFIX}`;
+  await writeFile(
+    staging,
+    JSON.stringify(record, null, JSON_INDENT) + "\n",
+    "utf8",
+  );
+  await rename(staging, path);
+  return path;
+}
+
+/**
+ * Read a gate record, or null when none has been written for the feature. A record written
+ * by a different schema version is an error rather than a silent miss: the caller must
+ * regenerate it instead of reasoning over a format this build does not understand.
+ */
+export async function readGateRecord(
+  dirAbs: string,
+  feature: string,
+): Promise<GateRecord | null> {
+  let text: string;
+  try {
+    text = await readFile(recordPath(dirAbs, feature), "utf8");
+  } catch (error) {
+    if (isMissingFile(error)) return null;
+    throw error;
+  }
+  const raw = JSON.parse(text) as { schemaVersion?: unknown };
+  if (raw.schemaVersion !== GATE_SCHEMA_VERSION) {
+    throw new Error(
+      `gate record for "${feature}" uses schema version ${String(raw.schemaVersion)}, ` +
+        `expected ${GATE_SCHEMA_VERSION}; re-run "capmap gate"`,
+    );
+  }
+  return GateRecordSchema.parse(raw);
+}

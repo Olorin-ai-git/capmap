@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/capmap-core" },
+    { "path": "packages/capmap-cli" },
+    { "path": "packages/capmap-mcp" },
+    { "path": "hooks" }
+  ]
+}

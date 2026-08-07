@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "repo": "beta",
+  "tier": "active",
+  "domains": [
+    {
+      "id": "beta/identity-access",
+      "repo": "beta",
+      "tier": "active",
+      "title": "Identity & Access",
+      "summary": "User authentication via OIDC authorization code flow with PKCE, ID token verification, and TOTP-based two-factor enrollment.",
+      "domainTags": [
+        "auth"
+      ],
+      "packages": [
+        "beta/auth"
+      ],
+      "stack": [
+        "npm-package"
+      ],
+      "maturity": "beta",
+      "proofOfLife": {
+        "deployed": null,
+        "testCount": null,
+        "lastCommit": null
+      },
+      "scannedSha": null
+    },
+    {
+      "id": "beta/billing-payments",
+      "repo": "beta",
+      "tier": "active",
+      "title": "Billing & Payments",
+      "summary": "Hosted checkout flow initiation and signature verification for incoming payment provider webhooks.",
+      "domainTags": [
+        "billing",
+        "payments",
+        "webhooks"
+      ],
+      "packages": [
+        "beta/billing"
+      ],
+      "stack": [
+        "npm-package"
+      ],
+      "maturity": "beta",
+      "proofOfLife": {
+        "deployed": null,
+        "testCount": null,
+        "lastCommit": null
+      },
+      "scannedSha": null
+    },
+    {
+      "id": "beta/messaging",
+      "repo": "beta",
+      "tier": "active",
+      "title": "Transactional Messaging",
+      "summary": "Sends templated transactional emails to users.",
+      "domainTags": [
+        "email",
+        "notifications"
+      ],
+      "packages": [
+        "beta/email"
+      ],
+      "stack": [
+        "npm-package",
+        "firebase-functions"
+      ],
+      "maturity": "beta",
+      "proofOfLife": {
+        "deployed": "firebase-functions",
+        "testCount": null,
+        "lastCommit": null
+      },
+      "scannedSha": null
+    }
+  ],
+  "packages": [
+    {
+      "id": "beta/auth",
+      "repo": "beta",
+      "kind": "npm-package",
+      "name": "@beta/auth",
+      "path": "beta/packages/auth",
+      "manifest": "package.json",
+      "entry": "src/index.ts",
+      "exports": [
+        "enrollTotp",
+        "startOidcFlow",
+        "verifyIdToken"
+      ],
+      "deps": {
+        "internal": [],
+        "external": []
+      },
+      "consumers": [],
+      "deployTarget": null,
+      "loc": 11,
+      "hasTests": true,
+      "hasReadme": true,
+      "lastCommit": null,
+      "significance": 0.47917449740522006,
+      "maturity": "beta",
+      "summary": "Handles user authentication via OIDC authorization code flow with PKCE and ID token verification, plus TOTP-based two-factor enrollment.",
+      "domainTags": [
+        "auth"
+      ],
+      "scannedSha": null,
+      "enrichmentFailed": false,
+      "extractionFailed": false
+    },
+    {
+      "id": "beta/billing",
+      "repo": "beta",
+      "kind": "npm-package",
+      "name": "@beta/billing",
+      "path": "beta/packages/billing",
+      "manifest": "package.json",
+      "entry": "src/index.ts",
+      "exports": [
+        "createCheckout",
+        "verifyWebhook"
+      ],
+      "deps": {
+        "internal": [],
+        "external": []
+      },
+      "consumers": [],
+      "deployTarget": null,
+      "loc": 8,
+      "hasTests": true,
+      "hasReadme": true,
+      "lastCommit": null,
+      "significance": 0.4757969138340268,
+      "maturity": "beta",
+      "summary": "Provides functions to initiate a hosted checkout flow and verify signatures on incoming payment provider webhooks.",
+      "domainTags": [
+        "billing",
+        "payments",
+        "webhooks"
+      ],
+      "scannedSha": null,
+      "enrichmentFailed": false,
+      "extractionFailed": false
+    },
+    {
+      "id": "beta/email",
+      "repo": "beta",
+      "kind": "npm-package",
+      "name": "@beta/email",
+      "path": "beta/packages/email",
+      "manifest": "package.json",
+      "entry": "src/index.ts",
+      "exports": [
+        "sendTemplated"
+      ],
+      "deps": {
+        "internal": [],
+        "external": []
+      },
+      "consumers": [],
+      "deployTarget": {
+        "kind": "firebase-functions",
+        "config": "firebase.json"
+      },
+      "loc": 5,
+      "hasTests": false,
+      "hasReadme": true,
+      "lastCommit": null,
+      "significance": 0.4710364771611167,
+      "maturity": "beta",
+      "summary": "Provides a function for sending templated transactional emails.",
+      "domainTags": [
+        "email",
+        "notifications"
+      ],
+      "scannedSha": null,
+      "enrichmentFailed": false,
+      "extractionFailed": false
+    }
+  ],
+  "minor": [
+    {
+      "id": "beta/beta",
+      "path": "beta",
+      "kind": "app",
+      "significance": 0.28779179568309127,
+      "parseError": null
+    }
+  ]
+}

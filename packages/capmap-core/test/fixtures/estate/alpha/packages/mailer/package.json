@@ -1,0 +1,10 @@
+{
+  "name": "@alpha/mailer",
+  "version": "0.4.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "dependencies": {
+    "@alpha/ui-kit": "workspace:*",
+    "mjml": "^4.15.3"
+  }
+}

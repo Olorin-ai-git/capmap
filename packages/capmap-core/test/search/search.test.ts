@@ -1,0 +1,94 @@
+import { describe, it, expect } from "vitest";
+import { searchIndex } from "../../src/search/search.js";
+import {
+  INDEX_SCHEMA_VERSION,
+  type RepoIndex,
+} from "../../src/model/index-schema.js";
+
+const repos: RepoIndex[] = [
+  {
+    schemaVersion: INDEX_SCHEMA_VERSION,
+    repo: "angainor",
+    tier: "active" as const,
+    domains: [
+      {
+        id: "angainor/multi-tenant-billing",
+        repo: "angainor",
+        tier: "active" as const,
+        title: "Multi-org onboarding and Stripe billing",
+        summary: "Organization signup and subscription billing.",
+        domainTags: ["billing", "auth"],
+        packages: ["angainor/billing"],
+        stack: ["stripe"],
+        maturity: "ga" as const,
+        proofOfLife: {
+          deployed: "console.angainor.ai",
+          testCount: 408,
+          lastCommit: null,
+        },
+        scannedSha: null,
+      },
+    ],
+    packages: [
+      {
+        id: "angainor/billing",
+        repo: "angainor",
+        kind: "service" as const,
+        name: "billing",
+        path: "Angainor/control-plane/src/billing",
+        manifest: "package.json",
+        entry: null,
+        exports: ["createSubscription"],
+        deps: { internal: [], external: ["stripe"] },
+        consumers: [],
+        deployTarget: null,
+        loc: 900,
+        hasTests: true,
+        hasReadme: true,
+        lastCommit: null,
+        significance: 0.8,
+        maturity: "ga" as const,
+        summary: "Stripe subscription lifecycle.",
+        domainTags: ["billing"],
+        scannedSha: null,
+        enrichmentFailed: false,
+        extractionFailed: false,
+      },
+    ],
+    minor: [
+      {
+        id: "angainor/billing-fixtures",
+        path: "Angainor/test/fixtures",
+        kind: "npm-package" as const,
+        significance: 0.1,
+        parseError: null,
+      },
+    ],
+  },
+];
+
+describe("searchIndex", () => {
+  it("ranks the matching domain above its packages", () => {
+    const hits = searchIndex({ repos, query: "billing", limit: 10 });
+    expect(hits[0]!.id).toBe("angainor/multi-tenant-billing");
+    expect(hits[0]!.layer).toBe("domain");
+  });
+
+  it("matches on exported symbol names", () => {
+    const hits = searchIndex({ repos, query: "createSubscription", limit: 10 });
+    expect(hits.map((h) => h.id)).toContain("angainor/billing");
+  });
+
+  it("floors minor entries below real entries", () => {
+    const hits = searchIndex({ repos, query: "billing", limit: 10 });
+    expect(hits.at(-1)!.layer).toBe("minor");
+  });
+
+  it("returns nothing for a query with no term overlap", () => {
+    expect(searchIndex({ repos, query: "holography", limit: 10 })).toEqual([]);
+  });
+
+  it("honours the limit", () => {
+    expect(searchIndex({ repos, query: "billing", limit: 1 })).toHaveLength(1);
+  });
+});

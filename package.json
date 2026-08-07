@@ -1,0 +1,29 @@
+{
+  "name": "capability-map",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "vitest run --coverage",
+    "lint": "eslint .",
+    "typecheck": "tsc -b && tsc --noEmit -p tsconfig.test.json",
+    "gates": "node scripts/report-index.mjs && node scripts/hook-matrix.mjs && node scripts/hook-latency.mjs && node scripts/check-negative-controls.mjs && node scripts/check-transcript-provenance.mjs",
+    "verify": "scripts/verify.sh",
+    "verify:linux": "scripts/verify-linux.sh",
+    "skills:install": "node scripts/install-skills.mjs"
+  },
+  "devDependencies": {
+    "@capmap/cli": "workspace:*",
+    "@eslint/js": "^9",
+    "@types/node": "^22.7.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "eslint": "^9",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8",
+    "vitest": "^2.1.0"
+  }
+}

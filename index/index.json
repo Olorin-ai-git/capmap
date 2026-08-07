@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-07T03:26:46.673Z",
+  "root": "example/estate",
+  "repos": [
+    {
+      "id": "alpha",
+      "path": "alpha",
+      "tier": "core",
+      "vcs": "none",
+      "available": true,
+      "scannedSha": null,
+      "domainCount": 4,
+      "packageCount": 4,
+      "minorCount": 2,
+      "enrichedAt": "2026-08-07T03:26:31.841Z"
+    },
+    {
+      "id": "beta",
+      "path": "beta",
+      "tier": "active",
+      "vcs": "none",
+      "available": true,
+      "scannedSha": null,
+      "domainCount": 3,
+      "packageCount": 3,
+      "minorCount": 1,
+      "enrichedAt": "2026-08-07T03:26:39.668Z"
+    },
+    {
+      "id": "vendor-toolkit",
+      "path": "vendor-toolkit",
+      "tier": "external",
+      "vcs": "none",
+      "available": true,
+      "scannedSha": null,
+      "domainCount": 1,
+      "packageCount": 1,
+      "minorCount": 0,
+      "enrichedAt": "2026-08-07T03:26:46.672Z"
+    }
+  ]
+}

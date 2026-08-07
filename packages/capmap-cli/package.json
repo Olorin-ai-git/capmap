@@ -1,0 +1,21 @@
+{
+  "name": "@capmap/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "capmap": "./bin/capmap.mjs"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "@capmap/core": "workspace:*",
+    "commander": "^12.1.0",
+    "pino": "^9.5.0"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ]
+}

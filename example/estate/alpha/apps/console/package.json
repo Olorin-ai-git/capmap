@@ -1,0 +1,9 @@
+{
+  "name": "@alpha/console",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@alpha/ui-kit": "1.0.0",
+    "@alpha/auth": "1.0.0"
+  }
+}

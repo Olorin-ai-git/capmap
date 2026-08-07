@@ -1,0 +1,9 @@
+{
+  "repos": [
+    { "id": "alpha", "path": "alpha", "tier": "core", "vcs": "git" },
+    { "id": "beta", "path": "beta", "tier": "active", "vcs": "git" },
+    { "id": "gamma", "path": "gamma", "tier": "archived", "vcs": "none" },
+    { "id": "delta", "path": "delta", "tier": "active", "vcs": "git" },
+    { "id": "epsilon", "path": "epsilon", "tier": "external", "vcs": "git" }
+  ]
+}

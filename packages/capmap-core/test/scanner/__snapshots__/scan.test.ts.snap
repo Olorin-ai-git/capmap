@@ -1,0 +1,79 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`scanRepo > produces a stable snapshot for the whole fixture estate 1`] = `
+[
+  {
+    "minor": [
+      "alpha/alpha",
+      "alpha/console",
+      "alpha/mailer",
+      "alpha/nameless",
+    ],
+    "packages": [
+      {
+        "consumers": [
+          "alpha/console",
+          "alpha/mailer",
+        ],
+        "exports": [
+          "Button",
+          "Modal",
+          "useTheme",
+        ],
+        "id": "alpha/ui-kit",
+        "kind": "npm-package",
+        "maturity": "beta",
+        "significance": 0.5818,
+      },
+    ],
+    "repo": "alpha",
+  },
+  {
+    "minor": [],
+    "packages": [
+      {
+        "consumers": [],
+        "exports": [
+          "Settings",
+          "run",
+        ],
+        "id": "beta/beta",
+        "kind": "py-package",
+        "maturity": "beta",
+        "significance": 0.6378,
+      },
+    ],
+    "repo": "beta",
+  },
+  {
+    "minor": [
+      "gamma/gamma",
+    ],
+    "packages": [],
+    "repo": "gamma",
+  },
+  {
+    "minor": [
+      "delta/delta",
+    ],
+    "packages": [],
+    "repo": "delta",
+  },
+  {
+    "minor": [],
+    "packages": [
+      {
+        "consumers": [],
+        "exports": [
+          "scoreRisk",
+        ],
+        "id": "epsilon/epsilon",
+        "kind": "npm-package",
+        "maturity": "beta",
+        "significance": 0.4689,
+      },
+    ],
+    "repo": "epsilon",
+  },
+]
+`;

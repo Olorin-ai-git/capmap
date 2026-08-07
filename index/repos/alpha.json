@@ -1,0 +1,263 @@
+{
+  "schemaVersion": 1,
+  "repo": "alpha",
+  "tier": "core",
+  "domains": [
+    {
+      "id": "alpha/identity-access",
+      "repo": "alpha",
+      "tier": "core",
+      "title": "Identity & Access",
+      "summary": "Authentication primitives covering session creation, bearer token verification, and TOTP two-factor enrollment for securing user access.",
+      "domainTags": [
+        "auth"
+      ],
+      "packages": [
+        "alpha/auth"
+      ],
+      "stack": [
+        "npm-package"
+      ],
+      "maturity": "beta",
+      "proofOfLife": {
+        "deployed": null,
+        "testCount": null,
+        "lastCommit": null
+      },
+      "scannedSha": null
+    },
+    {
+      "id": "alpha/billing-payments",
+      "repo": "alpha",
+      "tier": "core",
+      "title": "Billing & Payments",
+      "summary": "Hosted checkout, customer portal, and webhook signature verification for handling subscription billing and payment events.",
+      "domainTags": [
+        "billing",
+        "payments",
+        "webhooks"
+      ],
+      "packages": [
+        "alpha/billing"
+      ],
+      "stack": [
+        "npm-package"
+      ],
+      "maturity": "beta",
+      "proofOfLife": {
+        "deployed": null,
+        "testCount": null,
+        "lastCommit": null
+      },
+      "scannedSha": null
+    },
+    {
+      "id": "alpha/transactional-messaging",
+      "repo": "alpha",
+      "tier": "core",
+      "title": "Transactional Messaging",
+      "summary": "Templated transactional email delivery deployed as a Firebase function for user-facing notifications.",
+      "domainTags": [
+        "email",
+        "notifications"
+      ],
+      "packages": [
+        "alpha/email"
+      ],
+      "stack": [
+        "npm-package",
+        "firebase-functions"
+      ],
+      "maturity": "beta",
+      "proofOfLife": {
+        "deployed": "firebase-functions",
+        "testCount": null,
+        "lastCommit": null
+      },
+      "scannedSha": null
+    },
+    {
+      "id": "alpha/design-system",
+      "repo": "alpha",
+      "tier": "core",
+      "title": "Design System",
+      "summary": "Reusable UI components including buttons, modals, and theming utilities for building consistent, branded interfaces.",
+      "domainTags": [
+        "ui-kit",
+        "design-tokens"
+      ],
+      "packages": [
+        "alpha/ui-kit"
+      ],
+      "stack": [
+        "npm-package"
+      ],
+      "maturity": "beta",
+      "proofOfLife": {
+        "deployed": null,
+        "testCount": null,
+        "lastCommit": null
+      },
+      "scannedSha": null
+    }
+  ],
+  "packages": [
+    {
+      "id": "alpha/auth",
+      "repo": "alpha",
+      "kind": "npm-package",
+      "name": "@alpha/auth",
+      "path": "alpha/packages/auth",
+      "manifest": "package.json",
+      "entry": "src/index.ts",
+      "exports": [
+        "createSession",
+        "enrollTotp",
+        "verifyToken"
+      ],
+      "deps": {
+        "internal": [],
+        "external": []
+      },
+      "consumers": [
+        "alpha/console"
+      ],
+      "deployTarget": null,
+      "loc": 11,
+      "hasTests": true,
+      "hasReadme": true,
+      "lastCommit": null,
+      "significance": 0.5422674727623658,
+      "maturity": "beta",
+      "summary": "Provides session creation, bearer token verification, and TOTP two-factor enrollment for authenticating users.",
+      "domainTags": [
+        "auth"
+      ],
+      "scannedSha": null,
+      "enrichmentFailed": false,
+      "extractionFailed": false
+    },
+    {
+      "id": "alpha/billing",
+      "repo": "alpha",
+      "kind": "npm-package",
+      "name": "@alpha/billing",
+      "path": "alpha/packages/billing",
+      "manifest": "package.json",
+      "entry": "src/index.ts",
+      "exports": [
+        "createCheckout",
+        "openPortal",
+        "verifyWebhook"
+      ],
+      "deps": {
+        "internal": [],
+        "external": []
+      },
+      "consumers": [],
+      "deployTarget": null,
+      "loc": 11,
+      "hasTests": true,
+      "hasReadme": true,
+      "lastCommit": null,
+      "significance": 0.47917449740522006,
+      "maturity": "beta",
+      "summary": "Provides billing functionality including hosted checkout creation, customer portal access, and webhook signature verification.",
+      "domainTags": [
+        "billing",
+        "payments",
+        "webhooks"
+      ],
+      "scannedSha": null,
+      "enrichmentFailed": false,
+      "extractionFailed": false
+    },
+    {
+      "id": "alpha/email",
+      "repo": "alpha",
+      "kind": "npm-package",
+      "name": "@alpha/email",
+      "path": "alpha/packages/email",
+      "manifest": "package.json",
+      "entry": "src/index.ts",
+      "exports": [
+        "sendTemplated"
+      ],
+      "deps": {
+        "internal": [],
+        "external": []
+      },
+      "consumers": [],
+      "deployTarget": {
+        "kind": "firebase-functions",
+        "config": "firebase.json"
+      },
+      "loc": 5,
+      "hasTests": false,
+      "hasReadme": true,
+      "lastCommit": null,
+      "significance": 0.4710364771611167,
+      "maturity": "beta",
+      "summary": "Sends templated transactional emails as a deployable Firebase function.",
+      "domainTags": [
+        "email",
+        "notifications"
+      ],
+      "scannedSha": null,
+      "enrichmentFailed": false,
+      "extractionFailed": false
+    },
+    {
+      "id": "alpha/ui-kit",
+      "repo": "alpha",
+      "kind": "npm-package",
+      "name": "@alpha/ui-kit",
+      "path": "alpha/packages/ui-kit",
+      "manifest": "package.json",
+      "entry": "src/index.ts",
+      "exports": [
+        "Button",
+        "Modal",
+        "useTheme"
+      ],
+      "deps": {
+        "internal": [],
+        "external": []
+      },
+      "consumers": [
+        "alpha/console"
+      ],
+      "deployTarget": null,
+      "loc": 11,
+      "hasTests": true,
+      "hasReadme": true,
+      "lastCommit": null,
+      "significance": 0.5422674727623658,
+      "maturity": "beta",
+      "summary": "Provides reusable UI components including buttons, modals, and theming utilities for building consistent interfaces.",
+      "domainTags": [
+        "ui-kit",
+        "design-tokens"
+      ],
+      "scannedSha": null,
+      "enrichmentFailed": false,
+      "extractionFailed": false
+    }
+  ],
+  "minor": [
+    {
+      "id": "alpha/alpha",
+      "path": "alpha",
+      "kind": "app",
+      "significance": 0.2952033565226233,
+      "parseError": null
+    },
+    {
+      "id": "alpha/console",
+      "path": "alpha/apps/console",
+      "kind": "npm-package",
+      "significance": 0.17579691383402682,
+      "parseError": null
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@capmap/hooks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "picomatch": "^4.0.2"
+  },
+  "devDependencies": {
+    "@capmap/core": "workspace:*",
+    "@types/picomatch": "^3.0.1"
+  }
+}

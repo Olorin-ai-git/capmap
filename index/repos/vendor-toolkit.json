@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "repo": "vendor-toolkit",
+  "tier": "external",
+  "domains": [
+    {
+      "id": "vendor-toolkit/vendor-ledger-parsing",
+      "repo": "vendor-toolkit",
+      "tier": "external",
+      "title": "Vendor Ledger Parsing",
+      "summary": "Vendored third-party tooling for parsing vendor ledger exports, kept strictly for reference and not intended for active import.",
+      "domainTags": [
+        "financial-data"
+      ],
+      "packages": [
+        "vendor-toolkit/vendor-toolkit"
+      ],
+      "stack": [
+        "npm-package"
+      ],
+      "maturity": "beta",
+      "proofOfLife": {
+        "deployed": null,
+        "testCount": null,
+        "lastCommit": null
+      },
+      "scannedSha": null
+    }
+  ],
+  "packages": [
+    {
+      "id": "vendor-toolkit/vendor-toolkit",
+      "repo": "vendor-toolkit",
+      "kind": "npm-package",
+      "name": "@vendor/toolkit",
+      "path": "vendor-toolkit",
+      "manifest": "package.json",
+      "entry": "src/index.ts",
+      "exports": [
+        "parseLedger"
+      ],
+      "deps": {
+        "internal": [],
+        "external": []
+      },
+      "consumers": [],
+      "deployTarget": null,
+      "loc": 5,
+      "hasTests": true,
+      "hasReadme": true,
+      "lastCommit": null,
+      "significance": 0.4710364771611167,
+      "maturity": "beta",
+      "summary": "Vendored third-party tooling for parsing vendor ledger exports, kept for reference only and not intended to be imported.",
+      "domainTags": [
+        "financial-data"
+      ],
+      "scannedSha": null,
+      "enrichmentFailed": false,
+      "extractionFailed": false
+    }
+  ],
+  "minor": []
+}

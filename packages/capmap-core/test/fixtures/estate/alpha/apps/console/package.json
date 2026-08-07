@@ -1,0 +1,8 @@
+{
+  "name": "@alpha/console",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@alpha/ui-kit": "workspace:*"
+  }
+}
