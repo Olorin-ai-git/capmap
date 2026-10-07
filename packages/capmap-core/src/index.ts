@@ -40,6 +40,7 @@ export * from "./gate/match-parse.js";
 export * from "./gate/resolve.js";
 export * from "./gate/run.js";
 export * from "./gate/interactive.js";
+export * from "./gate/eval.js";
 
 // `record.js` re-exports deriveFeatureId, so feature-id.js is deliberately not
 // exported here as well — doing so would be a duplicate export of one symbol.

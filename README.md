@@ -152,6 +152,23 @@ after a build.
   [`docs/operations/checks-that-cannot-fail.md`](docs/operations/checks-that-cannot-fail.md)
   is the whole log, including the ones that were embarrassing.
 
+## Measuring it
+
+The thresholds are only as good as the verdicts they produce, so measure them.
+Write a labelled set — components your estate really duplicated, each with the
+verdict and capability a correct gate gives — and keep it beside your config,
+outside this checkout. [`example/labels.json`](example/labels.json) is the
+format, labelled for the example estate.
+
+```bash
+pnpm exec capmap eval ~/.capmap/labels.json            # gate accuracy + search recall
+pnpm exec capmap eval ~/.capmap/labels.json --no-gate  # search recall only, no API key
+```
+
+The result, with every case's score for calibrating the thresholds, is written
+to `labels.result.json` beside the set. If every case comes back `UNRESOLVED`
+the gate did not run, and nothing is recorded.
+
 ## What the verdicts mean
 
 | verdict      | meaning                                                     |
