@@ -212,3 +212,44 @@ describe("sub-packages of a Python project (CM-11)", () => {
     }
   });
 });
+
+/**
+ * Found by the labelled set over the real estate (CM-7): test packages were
+ * indexed as capabilities and outranked the real ones, and a project whose
+ * Poetry `packages` reach into a sibling project's directory listed that
+ * project's sub-packages twice, under one id.
+ */
+describe("sub-package discovery stays within capabilities (CM-7, CM-11)", () => {
+  it("does not index test packages even when they are not excluded paths", async () => {
+    const root = await monolith();
+    const units = await buildUnits({
+      rootAbs: join(root, "est"),
+      repo: { id: "mono", path: "mono", tier: "core", vcs: "none" },
+      internalScopes: SCOPES,
+      excludePaths: [],
+      python: { subpackageMaxDepth: 3 },
+    });
+    expect(units.map((u) => u.candidate.relPath)).not.toContain("mono/tests");
+  });
+
+  it("leaves a package declared from another project's directory to that project", async () => {
+    const root = await tree({
+      "est/core/pyproject.toml":
+        '[tool.poetry]\nname = "core"\npackages = [{ include = "voice", from = "voice-pipeline" }]\n',
+      "est/core/voice-pipeline/pyproject.toml":
+        '[tool.poetry]\nname = "voice-pipeline"\npackages = [{ include = "voice" }]\n',
+      "est/core/voice-pipeline/voice/__init__.py": "",
+      "est/core/voice-pipeline/voice/tts/__init__.py": "",
+    });
+    const units = await buildUnits({
+      rootAbs: join(root, "est"),
+      repo: { id: "core", path: "core", tier: "core", vcs: "none" },
+      internalScopes: SCOPES,
+      excludePaths: [],
+      python: { subpackageMaxDepth: 3 },
+    });
+    const paths = units.map((u) => u.candidate.relPath);
+    expect(paths.filter((p) => p === "voice-pipeline/voice/tts")).toHaveLength(1);
+    expect(new Set(units.map((u) => u.id)).size).toBe(units.length);
+  });
+});

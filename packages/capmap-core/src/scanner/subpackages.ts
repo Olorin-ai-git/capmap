@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { containedPath } from "./contained.js";
 import type { Candidate } from "./discover.js";
 import type { ParsedManifest } from "./manifest-npm.js";
+import { TEST_DIR_NAMES } from "./metrics.js";
 
 const INIT_FILE = "__init__.py";
 const REPO_ROOT_REL_PATH = ".";
@@ -32,6 +33,19 @@ function repoRel(project: Candidate, rel: string): string {
 }
 
 /**
+ * The stop paths strictly beneath the project. A Poetry `packages` entry may
+ * reach into a sibling project's directory (`from = "voice-pipeline"`); that
+ * project indexes its own packages, so everything at or beneath it is skipped
+ * here rather than listed a second time under the same path and id.
+ */
+function stopsBeneath(project: Candidate, stopRelPaths: Set<string>): string[] {
+  const prefix = project.relPath === REPO_ROOT_REL_PATH ? "" : `${project.relPath}/`;
+  return [...stopRelPaths].filter(
+    (stop) => stop !== project.relPath && stop !== REPO_ROOT_REL_PATH && stop.startsWith(prefix),
+  );
+}
+
+/**
  * The Python packages inside a project, so that a monolith is indexed as the
  * services it holds rather than as one directory name.
  *
@@ -45,10 +59,14 @@ export async function discoverSubpackages(
 ): Promise<Subpackage[]> {
   const { project, manifest } = args;
   const exclude = new Set(args.excludePaths);
+  const stops = stopsBeneath(project, args.stopRelPaths);
   const out: Subpackage[] = [];
 
   const visit = async (rel: string, dotted: string, depth: number): Promise<void> => {
-    if (args.stopRelPaths.has(repoRel(project, rel))) return;
+    const relRepo = repoRel(project, rel);
+    if (stops.some((stop) => relRepo === stop || relRepo.startsWith(`${stop}/`))) return;
+    // A test package exercises capabilities; it is never one to reuse.
+    if (TEST_DIR_NAMES.has(rel.split("/").pop() ?? rel)) return;
     if ((await containedPath(project.absPath, `${rel}/${INIT_FILE}`)) === null) return;
     if (depth > 0 || manifest.entryRelPath !== `${rel}/${INIT_FILE}`) {
       out.push({
