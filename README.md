@@ -169,6 +169,11 @@ The result, with every case's score for calibrating the thresholds, is written
 to `labels.result.json` beside the set. If every case comes back `UNRESOLVED`
 the gate did not run, and nothing is recorded.
 
+Status: the shipped thresholds (`reuseThreshold` 0.7, `extendThreshold` 0.5)
+have not yet been calibrated against a real estate. Only search recall has
+been measured on one (7 of 9 real duplicates in the top 10); gate accuracy
+needs an enriched index and a model credential, and has not been run.
+
 ## What the verdicts mean
 
 | verdict      | meaning                                                     |
