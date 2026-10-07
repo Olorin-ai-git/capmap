@@ -11,17 +11,19 @@
  */
 
 const PATH_SEPARATOR = /[/\\]/;
-const MARKDOWN_EXTENSION = /\.md$/i;
+const MARKDOWN_EXTENSION = /\.(md|markdown)$/i;
 const DATE_PREFIX = /^\d{4}-\d{2}-\d{2}-/;
 const ROLE_SUFFIX = /-(design|plan)$/;
 /** A spec-kit feature folder: `specs/029-tenant-portal/`. */
 const SPEC_KIT_FEATURE_DIR = /^\d{3}-[^/\\]+$/;
+/** The folder that holds spec-kit feature folders; only its children name a feature. */
+const SPEC_KIT_PARENT = /^specs$/i;
 /** File names that say what role a document plays, not which feature it is for. */
 const ROLE_FILE = /^(spec|plan|tasks|research|data-model|quickstart|design|checklist|readme)$/i;
 
 /**
  * Map a specification or plan path to the shared feature identifier that names its gate
- * record: the basename, minus the `.md` extension, minus a leading `YYYY-MM-DD-` date and
+ * record: the basename, minus the `.md` or `.markdown` extension, minus a leading `YYYY-MM-DD-` date and
  * minus a trailing `-design` or `-plan` role. A spec and its plan must derive to the same
  * id, or the hook could never link them.
  *
@@ -32,9 +34,14 @@ const ROLE_FILE = /^(spec|plan|tasks|research|data-model|quickstart|design|check
 export function deriveFeatureId(filePath: string): string {
   const segments = filePath.split(PATH_SEPARATOR);
   const folders = segments.slice(0, -1);
-  for (let i = folders.length - 1; i >= 0; i -= 1) {
+  // Only a numbered folder directly under `specs/` is a spec-kit feature; a
+  // numbered ancestor elsewhere (`/work/100-acme/repo`) would give every
+  // document beneath it one shared gate record.
+  for (let i = folders.length - 1; i >= 1; i -= 1) {
     const folder = folders[i] ?? "";
-    if (SPEC_KIT_FEATURE_DIR.test(folder)) return folder;
+    if (SPEC_KIT_FEATURE_DIR.test(folder) && SPEC_KIT_PARENT.test(folders[i - 1] ?? "")) {
+      return folder;
+    }
   }
   const base = (segments[segments.length - 1] ?? filePath).replace(MARKDOWN_EXTENSION, "");
   const parent = folders[folders.length - 1];

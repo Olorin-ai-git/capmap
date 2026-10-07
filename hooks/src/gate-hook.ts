@@ -2,7 +2,7 @@
 import { access, readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import picomatch from "picomatch";
-import { BYPASS_ENV_VAR, BYPASS_VALUE, decide } from "./decide.js";
+import { BYPASS_ENV_VAR, BYPASS_VALUE, HOOK_GLOB_OPTIONS, decide } from "./decide.js";
 import { deriveFeatureId } from "./feature-id.js";
 import { pendingHash } from "./pending-document.js";
 
@@ -105,8 +105,8 @@ async function main(): Promise<number> {
   }
 
   // Both are evaluated; the sets may overlap and each carries its own rule.
-  const isSpec = picomatch(config.hook.specGlobs)(fileAbs);
-  const isPlan = picomatch(config.hook.planGlobs)(fileAbs);
+  const isSpec = picomatch(config.hook.specGlobs, HOOK_GLOB_OPTIONS)(fileAbs);
+  const isPlan = picomatch(config.hook.planGlobs, HOOK_GLOB_OPTIONS)(fileAbs);
   const gateDir = await gateDirFor(fileAbs);
   const recordPath = join(gateDir, `gate-${deriveFeatureId(fileAbs)}.json`);
 

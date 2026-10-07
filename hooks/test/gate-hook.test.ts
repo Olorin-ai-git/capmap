@@ -94,8 +94,8 @@ async function scenario(): Promise<{ root: string; env: NodeJS.ProcessEnv }> {
     join(configRoot, "config", "scan.config.json"),
     JSON.stringify({
       hook: {
-        specGlobs: ["**/specs/**"],
-        planGlobs: ["**/plans/**"],
+        specGlobs: ["**/specs/**/*.{md,markdown}"],
+        planGlobs: ["**/plans/**/*.{md,markdown}"],
       },
       index: { dir: "index" },
     }),
@@ -178,6 +178,12 @@ describe("gate hook end to end", () => {
       env,
     );
     expect(result.stderr).not.toMatch(/--resolve/);
+  });
+
+  it("gates a plan whose extension differs in case (SP-3 audit)", async () => {
+    const { root, env } = await scenario();
+    const result = await invoke(join(root, "plans", "2026-08-02-other.MD"), env);
+    expect(result.code).toBe(EXIT_BLOCK);
   });
 
   it("leaves a file outside the configured globs alone", async () => {

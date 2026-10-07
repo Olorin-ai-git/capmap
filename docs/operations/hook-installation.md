@@ -66,14 +66,17 @@ refusing writes on the strength of a default.
 | Any component `UNRESOLVED`               | block, printing the verdict table                             |
 | Repositories stale                       | allow, with a warning                                         |
 
-Globs default to `**/docs/superpowers/specs/**/*.md`, `**/specs/**/*.md`,
-`**/plans/**/*.md` and `**/docs/**/plan*.md`, and are configured in
+Globs default to `**/docs/superpowers/specs/**/*.{md,markdown}`,
+`**/specs/**/*.{md,markdown}`, `**/plans/**/*.{md,markdown}` and
+`**/docs/**/plan*.{md,markdown}`, and are configured in
 `config/scan.config.json`. They match Markdown only, so an OpenAPI file or a
-diagram kept beside a specification is never gated as one.
+diagram kept beside a specification is never gated as one. The hook matches
+them without regard to case, so `plan.MD` is gated like `plan.md`.
 
 A gate record is named by the feature id. In a spec-kit layout
 (`specs/029-tenant-portal/spec.md`, `plan.md`, `tasks.md`, `contracts/…`) the
-numbered folder is the feature, so every file in it shares one record; a file
+numbered folder directly under `specs/` is the feature, so every file in it
+shares one record (a numbered directory anywhere else is not); a file
 named only for its role (`docs/feature-a/spec.md`) takes its directory's name.
 
 ## Bypassing

@@ -80,12 +80,12 @@
   },
   "hook": {
     "specGlobs": [
-      "**/docs/superpowers/specs/**/*.md",
-      "**/specs/**/*.md"
+      "**/docs/superpowers/specs/**/*.{md,markdown}",
+      "**/specs/**/*.{md,markdown}"
     ],
     "planGlobs": [
-      "**/plans/**/*.md",
-      "**/docs/**/plan*.md"
+      "**/plans/**/*.{md,markdown}",
+      "**/docs/**/plan*.{md,markdown}"
     ]
   },
   "index": {

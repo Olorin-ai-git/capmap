@@ -4,6 +4,13 @@ import type { GateRecord } from "@capmap/core";
 export const BYPASS_ENV_VAR = "CAPMAP_GATE";
 export const BYPASS_VALUE = "off";
 
+/**
+ * Glob matching for the gated-document globs ignores case: on a case-insensitive
+ * disk `plan.MD` is the same file as `plan.md`, and a case-sensitive match let a
+ * Write to it skip the gate.
+ */
+export const HOOK_GLOB_OPTIONS = { nocase: true } as const;
+
 const GATE_COMMAND = "capmap gate";
 const SCAN_COMMAND = "capmap scan --all";
 const REFRESH_COMMAND = "capmap refresh --stale";

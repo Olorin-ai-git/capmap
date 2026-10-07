@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import picomatch from "picomatch";
+import { HOOK_GLOB_OPTIONS } from "../src/decide.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -24,6 +25,23 @@ describe.each([
     expect(gated("/repo/specs/029-x/spec.md")).toBe(true);
     expect(gated("/repo/specs/029-x/plan.md")).toBe(true);
     expect(gated("/repo/docs/superpowers/plans/2026-08-02-x.md")).toBe(true);
+  });
+
+  /**
+   * SP-3 audit: picomatch is case-sensitive, so `plan.MD` or `x.markdown` was
+   * not gated, and on a case-insensitive disk a Write to `x.MD` overwrote the
+   * gated `x.md` with no gate check. The hook matches without regard to case.
+   */
+  it("gates Markdown whatever the extension's case or spelling", () => {
+    const hookGated = picomatch([...hook.specGlobs, ...hook.planGlobs], HOOK_GLOB_OPTIONS);
+    for (const path of [
+      "/repo/docs/superpowers/plans/x.MD",
+      "/repo/specs/029-x/spec.Md",
+      "/repo/plans/x.markdown",
+      "/repo/docs/superpowers/specs/x.MARKDOWN",
+    ]) {
+      expect(hookGated(path)).toBe(true);
+    }
   });
 
   it("leaves non-Markdown files under a specs folder alone", () => {

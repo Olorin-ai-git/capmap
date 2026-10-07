@@ -23,6 +23,9 @@ const PATHS = [
   "specs/029-x/contracts/api.md",
   "C:\\work\\specs\\030-y\\tasks.md",
   "docs/feature-a/spec.md",
+  "/work/100-acme/repo/docs/superpowers/plans/2026-08-02-x.md",
+  "/work/100-acme/repo/specs/029-x/spec.md",
+  "plans/x.markdown",
   "",
 ];
 
@@ -76,6 +79,27 @@ describe("feature id from the spec folder (CM-10)", () => {
   it("names a generically named file by its directory", () => {
     expect(deriveFeatureId("docs/feature-a/spec.md")).toBe("feature-a");
     expect(deriveFeatureId("docs/feature-a/plan.md")).toBe("feature-a");
+  });
+});
+
+/**
+ * SP-3 audit: any ancestor directory shaped like `100-acme` was taken as the
+ * feature, so every document in a checkout under `/work/100-acme/` shared one
+ * gate record and one feature's all-REUSE record admitted another's plan.
+ */
+describe("only a spec-kit folder names the feature", () => {
+  it("ignores a numbered directory that is not directly under specs/", () => {
+    expect(deriveFeatureId("/work/100-acme/repo/docs/superpowers/plans/2026-08-02-x.md")).toBe("x");
+    expect(deriveFeatureId("/work/100-acme/repo/docs/superpowers/plans/2026-08-02-y.md")).toBe("y");
+  });
+
+  it("still finds the spec-kit folder inside such a checkout", () => {
+    expect(deriveFeatureId("/work/100-acme/repo/specs/029-x/spec.md")).toBe("029-x");
+    expect(deriveFeatureId("/work/100-acme/repo/specs/029-x/contracts/api.md")).toBe("029-x");
+  });
+
+  it("strips every Markdown extension the hook gates", () => {
+    expect(deriveFeatureId("plans/2026-08-02-x.markdown")).toBe("x");
   });
 });
 
