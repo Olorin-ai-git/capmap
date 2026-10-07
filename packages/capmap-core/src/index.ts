@@ -28,6 +28,7 @@ export * from "./enrich/package-pass.js";
 export * from "./enrich/domain-pass.js";
 export * from "./enrich/domain-chunks.js";
 export * from "./enrich/domain-coverage.js";
+export { sanitiseDomain, sanitiseModelText } from "./enrich/untrusted.js";
 
 export * from "./search/search.js";
 export * from "./verify/verify.js";

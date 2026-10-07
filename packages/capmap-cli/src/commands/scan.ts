@@ -102,7 +102,12 @@ export async function runScan(
     // through domains.
     const carried =
       enriched === null
-        ? await carryEnrichment(store, repo.id, result.packages)
+        ? await carryEnrichment(
+            store,
+            repo.id,
+            deps.config.scan.enrichment.maxSummaryChars,
+            result.packages,
+          )
         : null;
 
     const index: RepoIndex = {

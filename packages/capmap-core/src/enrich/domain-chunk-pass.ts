@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { DomainEntry, PackageEntry } from "../model/index-schema.js";
 import { DOMAIN_SYSTEM_PROMPT, buildDomainPrompt } from "./domain-prompts.js";
 import type { EnrichDomainsArgs } from "./domain-pass.js";
-import { sanitiseModelText } from "./untrusted.js";
+import { sanitiseDomain } from "./untrusted.js";
 
 
 const MAX_TAGS = 6;
@@ -79,14 +79,13 @@ function toDomains(
       ...new Set(candidate.domainTags.filter((t) => allowed.has(t))),
     ].slice(0, MAX_TAGS);
     if (packages.length === 0 || domainTags.length === 0) continue;
-    if (sanitiseModelText(candidate.title, 1) === "" || sanitiseModelText(candidate.summary, 1) === "") continue;
     const members = args.packages.filter((p) => packages.includes(p.id));
-    domains.push({
+    const domain = sanitiseDomain({
       id: candidate.id,
       repo: args.repo.id,
       tier: args.repo.tier,
-      title: sanitiseModelText(candidate.title, args.config.maxSummaryChars),
-      summary: sanitiseModelText(candidate.summary, args.config.maxSummaryChars),
+      title: candidate.title,
+      summary: candidate.summary,
       domainTags,
       packages,
       stack: candidate.stack,
@@ -96,7 +95,8 @@ function toDomains(
         lastCommit: newestCommit(members),
       },
       scannedSha: args.scannedSha,
-    });
+    }, args.config.maxSummaryChars);
+    if (domain !== null) domains.push(domain);
   }
   return domains;
 }

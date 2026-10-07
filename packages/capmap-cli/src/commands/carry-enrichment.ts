@@ -1,3 +1,4 @@
+import { sanitiseDomain, sanitiseModelText } from "@capmap/core";
 import type { DomainEntry, IndexStore, PackageEntry } from "@capmap/core";
 
 export interface CarriedEnrichment {
@@ -19,11 +20,13 @@ export interface CarriedEnrichment {
  * Enrichment is carried by package id. A package whose id is absent from the
  * stored index is genuinely new and stays unenriched, which is honest. A
  * domain is kept only if at least one of its packages still exists as the
- * same unit, so a domain cannot outlive everything it described.
+ * same unit, so a domain cannot outlive everything it described. Carried text
+ * is sanitised and capped exactly as freshly enriched text is.
  */
 export async function carryEnrichment(
   store: IndexStore,
   repoId: string,
+  maxChars: number,
   scanned: PackageEntry[],
 ): Promise<CarriedEnrichment> {
   let previousPackages: PackageEntry[] = [];
@@ -52,9 +55,13 @@ export async function carryEnrichment(
   const packages = scanned.map((entry) => {
     const previous = sameUnit(entry);
     if (previous === undefined || previous.summary === null) return entry;
+    // The stored text may predate sanitising, or be hand-written; it is made
+    // safe again on every carry rather than trusted for having been stored.
+    const summary = sanitiseModelText(previous.summary, maxChars);
+    if (summary === "") return entry;
     return {
       ...entry,
-      summary: previous.summary,
+      summary,
       domainTags: previous.domainTags,
       enrichmentFailed: previous.enrichmentFailed,
     };
@@ -68,7 +75,9 @@ export async function carryEnrichment(
       ...domain,
       packages: domain.packages.filter((id) => surviving.has(id)),
     }))
-    .filter((domain) => domain.packages.length > 0);
+    .filter((domain) => domain.packages.length > 0)
+    .map((domain) => sanitiseDomain(domain, maxChars))
+    .filter((domain): domain is DomainEntry => domain !== null);
 
   return { packages, domains };
 }
