@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { access, readFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import picomatch from "picomatch";
 import { BYPASS_ENV_VAR, BYPASS_VALUE, decide, type Decision } from "./decide.js";
 import { deriveFeatureId } from "./feature-id.js";
-import { bindingProblem, isGateRecordPath, parseGateRecord } from "./gate-record.js";
+import { runsOperatorCommand } from "./bash-targets.js";
+import { bindingProblem, canonical, isGateRecordPath, parseGateRecord } from "./gate-record.js";
 import { AMBIGUOUS_EDIT_HASH, pendingHash } from "./pending-document.js";
 import { loadConfig, targetsOf, type HookConfig, type HookPayload, type Target } from "./payload.js";
 
@@ -15,6 +17,7 @@ const CONFIG_DIR_ENV_VAR = "CAPMAP_CONFIG_DIR";
 const SCAN_CONFIG_FILE = "scan.config.json";
 const MANIFEST_FILE = "index.json";
 const GIT_DIR = ".git";
+const BASH_TOOL = "Bash";
 const LINE_TERMINATOR = "\n";
 /** Case-insensitive, and into dot directories such as `.claude/worktrees`. */
 const GLOB_OPTIONS = { nocase: true, dot: true };
@@ -51,25 +54,44 @@ async function gateDirFor(fileAbs: string): Promise<string> {
 interface Context {
   config: HookConfig;
   configDir: string;
+  /**
+   * Directories only the operator or capmap itself may write: the gate's
+   * configuration, its index and the hook's own code. Changing any of them
+   * steers or disables the gate as surely as forging a record.
+   */
+  protectedDirs: string[];
   bypass: boolean;
   isSpec: (path: string) => boolean;
   isPlan: (path: string) => boolean;
 }
 
+function blockUnlessBypassed(ctx: Context, what: string, path: string): Decision {
+  return ctx.bypass
+    ? { allow: true, warning: `${BYPASS_ENV_VAR}=${BYPASS_VALUE}: ${what} allowed` }
+    : { allow: false, reason: `${what} is not allowed: ${path}\nBypass: ${BYPASS_ENV_VAR}=${BYPASS_VALUE}` };
+}
+
+const lower = (path: string): string => path.toLowerCase();
+const within = (dir: string, path: string): boolean =>
+  lower(path) === lower(dir) || lower(path).startsWith(lower(dir) + sep);
+
 async function evaluate(target: Target, ctx: Context): Promise<Decision> {
-  const { fileAbs } = target;
-  if (isGateRecordPath(fileAbs)) {
-    return ctx.bypass
-      ? { allow: true, warning: `${BYPASS_ENV_VAR}=${BYPASS_VALUE}: gate record write allowed` }
-      : {
-          allow: false,
-          reason:
-            `Gate records are written only by "capmap gate": ${fileAbs}\n` +
-            `Bypass: ${BYPASS_ENV_VAR}=${BYPASS_VALUE}`,
-        };
+  // Decided on the path as written and as it resolves, so a symbolic link
+  // cannot carry a write into a guarded place under an unguarded name.
+  const raw = target.fileAbs;
+  const fileAbs = await canonical(raw);
+  if (isGateRecordPath(raw) || isGateRecordPath(fileAbs)) {
+    return blockUnlessBypassed(
+      ctx,
+      `Writing a gate record other than through "capmap gate"`,
+      fileAbs,
+    );
   }
-  const isSpec = ctx.isSpec(fileAbs);
-  const isPlan = ctx.isPlan(fileAbs);
+  if (ctx.protectedDirs.some((dir) => within(dir, fileAbs))) {
+    return blockUnlessBypassed(ctx, "Changing the reuse gate's configuration, index or hook", fileAbs);
+  }
+  const isSpec = ctx.isSpec(raw) || ctx.isSpec(fileAbs);
+  const isPlan = ctx.isPlan(raw) || ctx.isPlan(fileAbs);
   if (!isSpec && !isPlan) return { allow: true, warning: null };
 
   const feature = deriveFeatureId(fileAbs);
@@ -80,7 +102,7 @@ async function evaluate(target: Target, ctx: Context): Promise<Decision> {
     const parsed = parseGateRecord(await readFile(recordPath, "utf8"), feature);
     record = parsed.record;
     recordProblem =
-      parsed.problem ?? (await bindingProblem(parsed.record, fileAbs, isPlan));
+      parsed.problem ?? (await bindingProblem(parsed.record, fileAbs, isPlan, ctx.isSpec));
   }
 
   return decide({
@@ -101,6 +123,9 @@ async function evaluate(target: Target, ctx: Context): Promise<Decision> {
   });
 }
 
+/** Where the hook's own compiled code lives. */
+const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
+
 async function run(configDir: string, bypass: boolean): Promise<number> {
   const payload = JSON.parse(await readStdin()) as HookPayload;
   const config = loadConfig(
@@ -109,10 +134,22 @@ async function run(configDir: string, bypass: boolean): Promise<number> {
   const ctx: Context = {
     config,
     configDir,
+    protectedDirs: await Promise.all(
+      [configDir, resolve(configDir, "..", config.index.dir), HOOK_DIR].map(canonical),
+    ),
     bypass,
     isSpec: picomatch(config.hook.specGlobs, GLOB_OPTIONS),
     isPlan: picomatch(config.hook.planGlobs, GLOB_OPTIONS),
   };
+  if (payload.tool_name === BASH_TOOL && runsOperatorCommand(payload.tool_input?.command ?? "")) {
+    const decision = blockUnlessBypassed(
+      ctx,
+      `Running "capmap gate --resolve" from an agent (it is answered by the operator, at a terminal)`,
+      payload.tool_input?.command ?? "",
+    );
+    process.stderr.write(`${decision.allow ? decision.warning : decision.reason}${LINE_TERMINATOR}`);
+    if (!decision.allow) return EXIT_BLOCK;
+  }
   const warnings = new Set<string>();
   for (const target of targetsOf(payload, payload.cwd ?? process.cwd())) {
     const decision = await evaluate(target, ctx);

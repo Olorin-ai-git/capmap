@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll, beforeAll } from "vitest";
 import { execFile } from "node:child_process";
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -249,5 +249,152 @@ describe("CM-16: repeated-string edits and line endings", () => {
     await writeFile(join(root, "specs", "foo.md"), crlf);
     await putRecord(root, genuineRecord(root, crlf));
     expect(await invoke(write(join(root, "specs", "foo.md"), crlf))).toBe(ALLOW);
+  });
+});
+
+/** A record `capmap gate` writes for `--component` flags, bound to `spec`. */
+function flagsRecord(root: string, specPath: string, spec: string, name: string): Record<string, unknown> {
+  const base = genuineRecord(root, spec);
+  const component = (base["components"] as Record<string, unknown>[])[0];
+  return {
+    ...base,
+    specPath,
+    componentsSource: "flags",
+    componentsHash: componentsHash([name]),
+    components: [{ ...component, name, verdict: "BUILD", target: null }],
+  };
+}
+
+describe("audit round 2, High: a plan binds to a real specification's declared components", () => {
+  it("blocks a plan gated from --component flags that replace the document's section", async () => {
+    const root = await repo();
+    await putRecord(root, flagsRecord(root, join(root, "specs", "foo.md"), SPEC_TEXT, "xyzzy"));
+    expect(await invoke(write(join(root, "plans", "foo.md")))).toBe(BLOCK);
+  });
+
+  it("blocks a plan gated from a decoy document outside the specification globs", async () => {
+    const root = await repo();
+    const decoy = "# Decoy\n\n## Components\n\n- xyzzy\n";
+    await mkdir(join(root, "scratch"));
+    await writeFile(join(root, "scratch", "foo.md"), decoy);
+    await putRecord(root, {
+      ...flagsRecord(root, join(root, "scratch", "foo.md"), decoy, "xyzzy"),
+      componentsSource: "document",
+    });
+    expect(await invoke(write(join(root, "plans", "foo.md")))).toBe(BLOCK);
+  });
+
+  it("still allows a plan gated from flags when the specification declares no section", async () => {
+    const root = await repo();
+    const prose = "# Spec\n\nprose only\n";
+    await writeFile(join(root, "specs", "foo.md"), prose);
+    await putRecord(root, flagsRecord(root, join(root, "specs", "foo.md"), prose, "billing"));
+    expect(await invoke(write(join(root, "plans", "foo.md")))).toBe(ALLOW);
+  });
+});
+
+describe("audit round 2: shell commands that write or execute are not reads", () => {
+  it("sees writes inside command and process substitution", async () => {
+    const root = await repo();
+    expect(await invoke(bash("cat $(cp /tmp/f.json .capmap/gate-foo.json)", root))).toBe(BLOCK);
+    expect(await invoke(bash("ls `tee plans/foo.md </tmp/x`", root))).toBe(BLOCK);
+    expect(await invoke(bash("cat <(cp /tmp/f.json .capmap/gate-foo.json)", root))).toBe(BLOCK);
+    expect(await invoke(bash('cat "$(cp /tmp/f.json .capmap/gate-foo.json)"', root))).toBe(BLOCK);
+  });
+
+  it("treats read-only commands with writing options as writes", async () => {
+    const root = await repo();
+    expect(await invoke(bash("git diff --output=.capmap/gate-foo.json", root))).toBe(BLOCK);
+    expect(await invoke(bash("git log -1 --output=plans/foo.md", root))).toBe(BLOCK);
+    expect(await invoke(bash("git grep -Osh x plans/foo.md", root))).toBe(BLOCK);
+    expect(await invoke(bash("rg --pre ./w x plans/foo.md", root))).toBe(BLOCK);
+  });
+
+  it("removes quotes and escapes before matching a path", async () => {
+    const root = await repo();
+    expect(await invoke(bash('cat > pl""ans/foo.md', root))).toBe(BLOCK);
+    expect(await invoke(bash("cat > pl\\ans/foo.md", root))).toBe(BLOCK);
+    expect(await invoke(bash("cat > 'plans'/foo.md", root))).toBe(BLOCK);
+    expect(await invoke(bash('cp /tmp/f.json .cap""map/gate-foo.json', root))).toBe(BLOCK);
+    expect(await invoke(bash('ln -s .cap""map l', root))).toBe(BLOCK);
+    expect(await invoke(bash('sh -c "cat > plans/foo.md"', root))).toBe(BLOCK);
+  });
+
+  it("resolves symbolic links before deciding what a path is", async () => {
+    const root = await repo();
+    await symlink(join(root, ".capmap"), join(root, "l"));
+    await symlink(join(root, "plans"), join(root, "p"));
+    expect(await invoke(write(join(root, "l", "gate-foo.json"), "{}"))).toBe(BLOCK);
+    expect(await invoke(write(join(root, "p", "foo.md")))).toBe(BLOCK);
+    expect(await invoke(bash("cat > p/foo.md", root))).toBe(BLOCK);
+  });
+});
+
+describe("audit round 2: an agent cannot drive the operator-only --resolve", () => {
+  it("blocks capmap gate --resolve from the Bash tool, however it is spelled", async () => {
+    const root = await repo();
+    expect(await invoke(bash("capmap gate specs/foo.md --resolve", root))).toBe(BLOCK);
+    const pty = `(sleep 1; printf '1\\n') | script -q /dev/null capmap gate spe""cs/foo.md --res''olve`;
+    expect(await invoke(bash(pty, root))).toBe(BLOCK);
+    expect(await invoke(bash("sh -c 'capmap gate specs/foo.md --resolve'", root))).toBe(BLOCK);
+    expect(await invoke(bash("capmap gate specs/foo.md", root))).toBe(ALLOW);
+  });
+});
+
+describe("audit round 2: the gate's own configuration, index and code are guarded", () => {
+  it("blocks writes to the configuration, the index and the hook", async () => {
+    const root = await repo();
+    const index = join(CONFIG_DIR, "..", "index", "index.json");
+    expect(await invoke(write(join(CONFIG_DIR, "scan.config.json"), "{}"))).toBe(BLOCK);
+    expect(await invoke(write(index, "{}"))).toBe(BLOCK);
+    expect(await invoke(write(HOOK, ""))).toBe(BLOCK);
+    expect(await invoke(bash(`echo x > ${join(CONFIG_DIR, "scan.config.json")}`, root))).toBe(BLOCK);
+    expect(await invoke(bash(`capmap scan --all`, root))).toBe(ALLOW);
+    expect(await invoke(write(join(CONFIG_DIR, "scan.config.json"), "{}"), { CAPMAP_GATE: "off" })).toBe(ALLOW);
+  });
+});
+
+describe("audit round 2: commands that write no guarded document are allowed", () => {
+  it("allows test runs, commits, copies out, reads, finds and directories", async () => {
+    const root = await repo();
+    for (const command of [
+      "npx vitest run test/specs/x.test.ts",
+      'git commit -m "update plans/foo"',
+      "cp specs/foo.md /tmp/b.md",
+      "sed -n 1,5p specs/foo.md",
+      "find specs -name '*.md'",
+      "mkdir -p plans specs/new",
+      "cat > notes.md <<'EOF'\nsee plans/foo.md and specs/foo.md\nEOF",
+      "git -C . log --oneline -- plans/foo.md",
+    ]) {
+      expect(await invoke(bash(command, root)), command).toBe(ALLOW);
+    }
+  });
+
+  it("still blocks the writing forms of those commands", async () => {
+    const root = await repo();
+    for (const command of [
+      "cp /tmp/x.md plans/foo.md",
+      "cp /tmp/foo.md plans/",
+      "mv /tmp/foo.md plans",
+      "find /tmp -name x -exec cp {} plans/foo.md \\;",
+      "sed -i.bak s/a/b/ specs/foo.md",
+      "cat <<EOF\n$(cp /tmp/x plans/foo.md)\nEOF",
+      "if true; then touch plans/foo.md; fi",
+    ]) {
+      expect(await invoke(bash(command, root)), command).toBe(BLOCK);
+    }
+  });
+});
+
+describe("audit round 2, Low: scope added under the verdicts section breaks the binding", () => {
+  it("blocks a plan after a subsection is added beneath the copied verdicts", async () => {
+    const root = await repo();
+    await putRecord(root, genuineRecord(root));
+    await writeFile(
+      join(root, "specs", "foo.md"),
+      `${SPEC_TEXT}\n## Reuse Verdicts\n\n| billing | REUSE |\n\n### New service: build our own auth\n`,
+    );
+    expect(await invoke(write(join(root, "plans", "foo-plan.md")))).toBe(BLOCK);
   });
 });

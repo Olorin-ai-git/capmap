@@ -1,7 +1,7 @@
 import { readFile, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import type { GateRecord } from "@capmap/core";
-import { componentsHash, specContentHash } from "./components-hash.js";
+import { componentsHash, extractComponents, specContentHash } from "./components-hash.js";
 
 /**
  * A dependency-free validator for gate records, plus the checks that bind a
@@ -102,14 +102,21 @@ export function parseGateRecord(
     : { record: null, problem };
 }
 
-async function canonical(path: string): Promise<string> {
-  try {
-    return await realpath(path);
-  } catch {
+/**
+ * The path with every symbolic link resolved, as far as it exists; the rest is
+ * appended unchanged. A link such as `l -> .capmap` must not hide where a write lands.
+ */
+export async function canonical(path: string): Promise<string> {
+  let existing = path;
+  let rest = "";
+  for (;;) {
     try {
-      return join(await realpath(dirname(path)), basename(path));
+      return join(await realpath(existing), rest);
     } catch {
-      return path;
+      const parent = dirname(existing);
+      if (parent === existing) return path;
+      rest = join(basename(existing), rest);
+      existing = parent;
     }
   }
 }
@@ -118,19 +125,26 @@ async function canonical(path: string): Promise<string> {
  * Why this record does not belong to the file being written, or null when it does.
  *
  * A specification must be the very file the record was gated from. A plan is
- * bound through its specification: that file must still exist and still hash
- * to the content the gate saw, so a plan cannot proceed against a record lent
- * from another document or outlived by edits to its own.
+ * bound through its specification: that file must be a specification by the
+ * configured globs, still hash to the content the gate saw, and — when it
+ * declares a `## Components` section — be gated for exactly those components.
+ * Otherwise a record gated from a decoy document, or from `--component` flags
+ * that replaced the declared list, would clear a plan nobody gated.
  */
 export async function bindingProblem(
   record: GateRecord,
   fileAbs: string,
   isPlan: boolean,
+  isSpec: (path: string) => boolean,
 ): Promise<string | null> {
+  const specAbs = await canonical(record.specPath);
   if (!isPlan) {
-    return (await canonical(record.specPath)) === (await canonical(fileAbs))
+    return specAbs === (await canonical(fileAbs))
       ? null
       : `it was produced for ${record.specPath}, not this file`;
+  }
+  if (!isSpec(record.specPath) && !isSpec(specAbs)) {
+    return `it was produced for ${record.specPath}, which is not a specification by the configured globs`;
   }
   let text: string;
   try {
@@ -138,7 +152,11 @@ export async function bindingProblem(
   } catch {
     return `its specification ${record.specPath} cannot be read`;
   }
-  return specContentHash(text) === record.specContentHash
+  if (specContentHash(text) !== record.specContentHash) {
+    return `its specification ${record.specPath} changed after the gate ran`;
+  }
+  const declared = extractComponents(text);
+  return declared === null || componentsHash(declared) === record.componentsHash
     ? null
-    : `its specification ${record.specPath} changed after the gate ran`;
+    : `it gated components other than the ones ${record.specPath} declares`;
 }

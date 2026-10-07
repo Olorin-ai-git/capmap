@@ -64,28 +64,39 @@ write (exit 2) and says why on stderr.
 | Existing file, no gate record            | block, pointing at `capmap gate <path>`                       |
 | Gate record malformed, or gates no components, or its hash disagrees with its components | block |
 | Specification write under a record gated from another file | block |
-| Plan write whose specification changed since the gate ran (a `## Reuse Verdicts` section excepted) | block, asking for a re-run |
-| Any write to a `.capmap/` directory | block — records are written only by `capmap gate` |
+| Plan write whose specification changed since the gate ran (the table rows of a `## Reuse Verdicts` section excepted) | block, asking for a re-run |
+| Plan write whose record came from a file outside `hook.specGlobs`, or gated components other than its specification's `## Components` | block |
+| Any write to a `.capmap/` directory, including through a symbolic link | block — records are written only by `capmap gate` |
+| Any write to the configuration directory, the index directory or the hook's own code | block — they steer or disable the gate |
+| `capmap gate --resolve` run through the Bash tool | block — resolution is answered by the operator at a terminal |
 | Configured, but the hook itself errors | block |
 | Component set changed since the gate ran | block, asking for a re-run                                    |
 | Any component `UNRESOLVED`               | block, printing the verdict table                             |
 | Repositories stale                       | allow, with a warning                                         |
 
 Globs are configured in `config/scan.config.json` and match case-insensitively,
-including inside dot directories such as `.claude/worktrees`. Plans cover
+including inside dot directories such as `.claude/worktrees`. Specifications are
+Markdown under `specs/` or `docs/superpowers/specs/`. Plans cover
 `**/plans/**`, `plan*`, `*-plan*`, `*_plan*` and `*implementation*` Markdown under
 `docs/`, and spec-kit's `plan.md` and `tasks.md` under `specs/`.
 
 ### Shell commands
 
-For `Bash`, every path-like word of the command is treated as a possible write of
-unknown content, except in segments that start with a read-only command (`cat`,
-`grep`, `ls`, `git diff`/`log`/`status`/`add`, …) or with `capmap` and redirect
-nothing. A gated specification can therefore not be changed through the shell
-(use `Write`/`Edit`, which the hook can reconstruct), and an ungated plan cannot
-be created through it. This is lexical, not a shell parser: paths assembled at
-run time (`$DIR/plan.md`, a subshell's own `cd`, a script that writes a file)
-are not seen; a `cd` or `pushd` earlier in the command is followed.
+For `Bash`, the command is lexed as the shell reads it: quotes and escapes are
+removed (`pl""ans` is `plans`), command and process substitutions, subshells and
+`sh -c` scripts are commands of their own, and heredoc bodies are data. Redirect
+targets are always writes. Arguments are writes, of unknown content, unless the
+command writes nothing through them (`cat`, `grep`, `ls`, `mkdir`, `sed` without
+`-i`, `find` without `-exec`/`-delete`, read-only `git` subcommands, `capmap`) or
+writes only its destination (`cp`, `install`, `rsync`: the last argument, and
+each source's name inside it). An option that makes a reader write or run
+something (`--output`, `--pre`, `git grep -O`) makes it a writer. A gated
+specification can therefore not be changed through the shell (use
+`Write`/`Edit`, which the hook can reconstruct), and an ungated plan cannot be
+created through it. Every path is decided after symbolic links are resolved.
+This is lexical, not a shell: paths assembled at run time (`$DIR/plan.md`,
+`xargs`, a script file that writes) are not seen; a `cd` or `pushd` earlier in
+the command is followed.
 
 ## Bypassing
 
