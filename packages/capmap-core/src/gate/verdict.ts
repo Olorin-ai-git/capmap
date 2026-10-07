@@ -20,7 +20,7 @@ export const TIER_CAP: Record<RepoTier, Verdict> = {
 const MINOR_CAP: Verdict = "REFERENCE";
 
 /** Relative ordering used to clamp a scored verdict down to a cap. */
-const STRENGTH: Record<Verdict, number> = {
+export const STRENGTH: Record<Verdict, number> = {
   UNRESOLVED: -1,
   BUILD: 0,
   REFERENCE: 1,
