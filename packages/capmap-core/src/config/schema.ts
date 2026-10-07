@@ -28,6 +28,13 @@ export const ScanConfigSchema = z.object({
   excludePaths: z.array(z.string().min(1)).min(1),
   excludeRepoGlobs: z.array(z.string().min(1)),
   internalScopes: z.array(z.string().min(1)).min(1),
+  python: z.object({
+    /**
+     * Levels of Python packages indexed below each import root of a project.
+     * A monolith's services sit two or three levels down (`app/services/x`).
+     */
+    subpackageMaxDepth: z.number().int().nonnegative(),
+  }),
   significance: z.object({
     threshold: z.number().min(0).max(1),
     weights: WeightsSchema.refine(

@@ -12,6 +12,7 @@ async function fixtureConfigDir(overrides: Record<string, unknown> = {}) {
     excludePaths: ["node_modules"],
     excludeRepoGlobs: ["*-wt"],
     internalScopes: ["@olorin/"],
+    python: { subpackageMaxDepth: 3 },
     significance: {
       threshold: 0.45,
       weights: {

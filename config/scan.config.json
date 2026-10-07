@@ -36,6 +36,9 @@
     "@beta/",
     "@vendor/"
   ],
+  "python": {
+    "subpackageMaxDepth": 3
+  },
   "significance": {
     "threshold": 0.45,
     "weights": {

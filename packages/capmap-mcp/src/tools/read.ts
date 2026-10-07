@@ -1,4 +1,5 @@
 import {
+  PackageKindSchema,
   computeDrift,
   searchIndex,
   verifyCapability,
@@ -30,7 +31,7 @@ export function readTools(deps: ToolDeps): ToolDefinition[] {
           },
           kind: {
             type: "string",
-            enum: ["npm-package", "py-package", "service", "app", "function"],
+            enum: PackageKindSchema.options,
           },
         },
         required: ["query"],

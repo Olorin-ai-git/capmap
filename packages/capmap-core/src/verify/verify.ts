@@ -2,7 +2,8 @@ import { access, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import type { PackageEntry } from "../model/index-schema.js";
-import { extractPyExports } from "../scanner/exports-py.js";
+import { extractPyPackageExports } from "../scanner/exports-py.js";
+import { pyProjectName } from "../scanner/manifest-py.js";
 import { extractTsExports, type ExportResult } from "../scanner/exports-ts.js";
 
 export type VerifyCheck = "path" | "manifest-name" | "entry" | "exports";
@@ -21,6 +22,9 @@ export interface VerifyArgs {
 
 /** Manifest file whose declared name is read as JSON; every other manifest is read as TOML. */
 const JSON_MANIFEST_FILE = "package.json";
+/** A Python sub-package has no manifest; its marker file stands in for one. */
+const PY_PACKAGE_MARKER = "__init__.py";
+const PY_KINDS: ReadonlySet<string> = new Set(["py-package", "py-subpackage"]);
 const DETAIL_SEPARATOR = "; ";
 
 async function exists(absPath: string): Promise<boolean> {
@@ -58,10 +62,7 @@ async function manifestName(
       const raw = JSON.parse(text) as { name?: unknown };
       return typeof raw.name === "string" ? raw.name : basename(dirAbs);
     }
-    const raw = parseToml(text) as { project?: { name?: unknown } };
-    return typeof raw.project?.name === "string"
-      ? raw.project.name
-      : basename(dirAbs);
+    return pyProjectName(parseToml(text) as Record<string, unknown>, dirAbs);
   } catch {
     return null;
   }
@@ -71,8 +72,8 @@ async function currentExports(
   entry: PackageEntry,
   entryAbs: string,
 ): Promise<ExportResult> {
-  return entry.kind === "py-package"
-    ? extractPyExports(entryAbs)
+  return PY_KINDS.has(entry.kind)
+    ? extractPyPackageExports(entryAbs)
     : extractTsExports(entryAbs);
 }
 
@@ -101,7 +102,15 @@ export async function verifyCapability(
     };
   }
 
-  const declared = await manifestName(dirAbs, entry.manifest);
+  // A sub-package is named by its dotted import path, whose last segment is
+  // its directory; it still exists as a package while its marker file does.
+  const declared =
+    entry.manifest === PY_PACKAGE_MARKER
+      ? (await exists(join(dirAbs, PY_PACKAGE_MARKER))) &&
+        entry.name.split(".").pop() === basename(dirAbs)
+        ? entry.name
+        : null
+      : await manifestName(dirAbs, entry.manifest);
   if (declared !== entry.name) {
     failed.push("manifest-name");
     details.push(

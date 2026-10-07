@@ -1,6 +1,7 @@
-import { readFile, access } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { PackageKind } from "../model/index-schema.js";
+import { containedPath } from "./contained.js";
 
 export interface ParsedManifest {
   name: string;
@@ -10,6 +11,11 @@ export interface ParsedManifest {
   isPrivate: boolean;
   hasTestScript: boolean;
   parseError: string | null;
+  /**
+   * Directories, relative to the manifest, holding the project's top-level
+   * Python import packages, in declaration order. Always empty for npm.
+   */
+  importRoots: string[];
 }
 
 const ENTRY_FIELDS = ["exports", "main", "module", "types"] as const;
@@ -48,30 +54,21 @@ function firstStringLeaf(value: unknown): string | null {
  * permanently on packages that had not changed at all.
  *
  * An unresolvable entry is recorded as null, which is honest: the package
- * exposes nothing this scanner can read without a build.
+ * exposes nothing this scanner can read without a build. So is one whose real
+ * location is outside the package directory (see `containedPath`).
  */
 async function resolveEntry(
   dir: string,
   raw: Record<string, unknown>,
 ): Promise<string | null> {
   for (const candidate of SOURCE_CANDIDATES) {
-    try {
-      await access(join(dir, candidate));
-      return candidate;
-    } catch {
-      continue;
-    }
+    if ((await containedPath(dir, candidate)) !== null) return candidate;
   }
   for (const field of ENTRY_FIELDS) {
     const leaf = firstStringLeaf(raw[field]);
     if (leaf === null) continue;
     const declared = leaf.replace(LEADING_RELATIVE, "");
-    try {
-      await access(join(dir, declared));
-      return declared;
-    } catch {
-      continue;
-    }
+    if ((await containedPath(dir, declared)) !== null) return declared;
   }
   return null;
 }
@@ -109,6 +106,7 @@ export async function parseNpmManifest(
     isPrivate: false,
     hasTestScript: false,
     parseError: null,
+    importRoots: [],
   };
 
   let raw: Record<string, unknown>;
@@ -141,5 +139,6 @@ export async function parseNpmManifest(
     isPrivate,
     hasTestScript,
     parseError: null,
+    importRoots: [],
   };
 }
