@@ -69,22 +69,27 @@ function isInside(parentAbs: string, childAbs: string): boolean {
 }
 
 /**
- * An index describes the estate it was built from. One built from
- * repositories outside this checkout must not be written into it, where the
- * next commit would publish it; only the bundled example estate is indexed in
- * place. Paths are compared lexically, so a symlink into the checkout is not
- * seen.
+ * What capmap writes from an estate — its index, an eval result — describes
+ * that estate. When anything it reads lies outside this checkout (the estate
+ * root or any configured repository), the output must not be written into the
+ * checkout, where the next commit would publish it; only the bundled example
+ * estate is indexed in place. Paths are compared lexically, so a symlink into
+ * the checkout is not seen.
  */
-function assertIndexPlacement(indexDirAbs: string, estateRootAbs: string): void {
+export function assertPlacement(targetAbs: string, config: LoadedConfig): void {
   const checkout = workspaceRoot();
-  if (isInside(checkout, indexDirAbs) && !isInside(checkout, estateRootAbs)) {
-    throw new Error(
-      `refusing to keep the index of ${estateRootAbs} in ${indexDirAbs}: an estate ` +
-        `outside this checkout must have its index outside this checkout too. Point ` +
-        `${CONFIG_DIR_ENV_VAR} at a configuration directory outside the checkout, or ` +
-        `make "index.dir" in scan.config.json an absolute path outside it.`,
-    );
-  }
+  if (!isInside(checkout, targetAbs)) return;
+  const rootAbs = resolve(config.root);
+  const outside = [rootAbs, ...config.repos.repos.map((repo) => resolve(rootAbs, repo.path))].find(
+    (sourceAbs) => !isInside(checkout, sourceAbs),
+  );
+  if (outside === undefined) return;
+  throw new Error(
+    `refusing to write ${targetAbs}: it describes ${outside}, which is outside this ` +
+      `checkout, so it must be kept outside this checkout too. Point ` +
+      `${CONFIG_DIR_ENV_VAR} at a configuration directory outside the checkout, or ` +
+      `make "index.dir" in scan.config.json an absolute path outside it.`,
+  );
 }
 
 /** The index lives beside the configuration directory unless made absolute. */
@@ -102,7 +107,7 @@ export async function buildDeps(env: NodeJS.ProcessEnv): Promise<CommandDeps> {
   const configDir = env[CONFIG_DIR_ENV_VAR] ?? defaultConfigDir();
   const config = await loadConfig({ configDir, env });
   const indexDirAbs = resolve(resolveIndexDir(configDir, config.scan.index.dir));
-  assertIndexPlacement(indexDirAbs, resolve(config.root));
+  assertPlacement(indexDirAbs, config);
   return {
     config,
     store: new IndexStore({ indexDirAbs }),

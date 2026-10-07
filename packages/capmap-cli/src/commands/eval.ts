@@ -8,7 +8,7 @@ import {
   type GateAccuracy,
   type LabelledSet,
 } from "@capmap/core";
-import type { CommandDeps } from "../composition.js";
+import { assertPlacement, type CommandDeps } from "../composition.js";
 import { loadIndexContext } from "./index-context.js";
 
 const EXIT_OK = 0;
@@ -114,6 +114,12 @@ export async function runEval(deps: CommandDeps, opts: EvalOptions): Promise<num
     opts.outPath === null
       ? labelsAbs.replace(JSON_SUFFIX, "") + RESULT_SUFFIX
       : absolute(opts.outPath);
+  try {
+    assertPlacement(outAbs, deps.config);
+  } catch (error) {
+    deps.writer.line(String(error instanceof Error ? error.message : error));
+    return EXIT_ERROR;
+  }
   const result = {
     measuredAt: deps.clock.now().toISOString(),
     labels: labelsAbs,
