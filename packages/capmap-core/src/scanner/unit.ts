@@ -26,7 +26,8 @@ export interface BuildUnitsArgs {
 }
 
 const NPM_MANIFEST_FILE = "package.json";
-const PY_KINDS: ReadonlySet<string> = new Set(["py-package", "py-subpackage"]);
+const SUBPACKAGE_KIND = "py-subpackage";
+const PY_KINDS: ReadonlySet<string> = new Set(["py-package", SUBPACKAGE_KIND]);
 const PATH_SEPARATOR = "/";
 /** A candidate at the repository root carries the relative path `.`. */
 const REPO_ROOT_REL_PATH = ".";
@@ -118,15 +119,23 @@ export async function buildUnits(args: BuildUnitsArgs): Promise<Unit[]> {
   parsed.sort((a, b) => a.candidate.relPath.localeCompare(b.candidate.relPath));
 
   // Ids are assigned across the whole repository at once, because uniqueness is
-  // a property of the set rather than of any single unit.
-  const ids = assignUnitIds(
+  // a property of the set rather than of any single unit. Manifest packages go
+  // first so a sub-package never takes an id a manifest package already held.
+  const relPathsOf = (sub: boolean): string[] =>
+    parsed
+      .filter((unit) => (unit.manifest.kind === SUBPACKAGE_KIND) === sub)
+      .map((unit) => unit.candidate.relPath);
+  const manifestIds = assignUnitIds(args.repo.id, relPathsOf(false));
+  const subIds = assignUnitIds(
     args.repo.id,
-    parsed.map((unit) => unit.candidate.relPath),
+    relPathsOf(true),
+    new Set(manifestIds.values()),
   );
   return parsed.map((unit) => ({
     ...unit,
     id:
-      ids.get(unit.candidate.relPath) ??
+      manifestIds.get(unit.candidate.relPath) ??
+      subIds.get(unit.candidate.relPath) ??
       unitId(args.repo.id, unit.candidate, unit.manifest),
   }));
 }

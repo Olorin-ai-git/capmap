@@ -126,4 +126,24 @@ describe("carryEnrichment", () => {
     expect(result.packages).toEqual(scanned);
     expect(result.domains).toEqual([]);
   });
+
+  /**
+   * SP-3 audit: an id can come to name different code between scans. The
+   * old summary, tags and domain membership must not rebind to that code.
+   */
+  it("does not carry enrichment or domain membership onto different code under the same id", async () => {
+    const store = await storeWith({
+      packages: [pkg("alpha/ui-kit", true)],
+      domains: [{ ...domain, packages: ["alpha/ui-kit"] }],
+    });
+    const moved = {
+      ...pkg("alpha/ui-kit", false),
+      kind: "py-subpackage" as const,
+      path: "alpha/backend/app/ui_kit",
+    };
+    const { packages, domains } = await carryEnrichment(store, "alpha", [moved]);
+    expect(packages[0]!.summary).toBeNull();
+    expect(packages[0]!.domainTags).toEqual([]);
+    expect(domains).toEqual([]);
+  });
 });

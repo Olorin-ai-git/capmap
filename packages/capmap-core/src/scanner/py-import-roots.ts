@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { containedPath } from "./contained.js";
+import { TEST_DIR_NAMES } from "./metrics.js";
 
 const INIT_FILE = "__init__.py";
 const SRC_LAYOUT_DIR = "src";
@@ -111,6 +112,8 @@ export async function importRoots(
   const keep = async (rels: string[]): Promise<string[]> => {
     const out: string[] = [];
     for (const rel of [...new Set(rels.map((r) => r.replace(/^\.\//, "")))]) {
+      // A test package exercises capabilities; it is never a project's import root.
+      if (TEST_DIR_NAMES.has(rel.split("/").pop() ?? rel)) continue;
       if (await exists(rel)) out.push(rel);
     }
     return out;
@@ -128,6 +131,6 @@ export async function importRoots(
     ...(await packageDirs(dir, CURRENT_DIR)),
     ...(await packageDirs(dir, SRC_LAYOUT_DIR)),
   ];
-  return found.filter((rel) => !excluded.has(rel.split("/").pop() ?? rel));
+  return keep(found.filter((rel) => !excluded.has(rel.split("/").pop() ?? rel)));
 }
 
