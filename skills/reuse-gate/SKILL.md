@@ -18,8 +18,8 @@ such as `tenant onboarding`, `billing`, `audit log`. Six to fifteen items is the
 range; a list of two is too coarse to match usefully.
 
 If the specification has no such section, write one with the user and get it agreed
-before proceeding. Alternatively pass components explicitly with repeated `--component`
-flags, which take precedence over the document.
+before proceeding. Only a specification with no such section may be gated with repeated
+`--component` flags instead; the gate refuses flags that would replace a declared list.
 
 ## Procedure
 
@@ -60,8 +60,10 @@ Resolution is the user's decision, made at their own terminal. Ask the user to r
 capmap gate <path to the specification> --resolve
 ```
 
-Do not run it yourself: it refuses to run without an interactive terminal, and
-piping answers into it is the bypass it exists to prevent. For each unresolved
+Do not run it yourself, in any form: it refuses to run without an interactive
+terminal or inside an agent session, the hook blocks it from the Bash tool, and
+scripting answers into it (a pipe, `script`, `expect`) is the bypass it exists to
+prevent. For each unresolved
 component the user chooses one of:
 
 1. Accept `BUILD` — the candidate is genuinely gone or wrong (no effect on a
@@ -79,7 +81,9 @@ Re-run the command until the exit code is `0`.
 
 Copy the verdict table from the record verbatim into a `## Reuse Verdicts` section of the
 specification — component, verdict, target, score, verified commit. Do not paraphrase,
-round scores, or omit `BUILD` rows. The section is the audit trail a reader uses to
+round scores, or omit `BUILD` rows. Put only the table in that section: its table rows
+are the one part of the specification the record's binding ignores, so any other text
+there counts as a change and needs a re-run. The section is the audit trail a reader uses to
 challenge the plan.
 
 Then, and only then, planning may begin.

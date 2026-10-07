@@ -134,7 +134,7 @@ program
   .description("Score a specification's components against the estate")
   .option(
     "--component <name>",
-    "component to gate; repeatable, overrides the document",
+    "component to gate; repeatable, only for a specification without a Components section",
     (value: string, previous: string[]) => [...previous, value],
     [] as string[],
   )

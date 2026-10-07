@@ -84,5 +84,6 @@ export async function makeDeps(options: MakeDepsOptions): Promise<TestDeps> {
     logger: silentLogger(),
     writer: options.reuseWriter === true ? sharedWriter : capturingWriter(),
     model: scriptedModel(options.modelResponses ?? [FIXTURE_MODEL_RESPONSE]),
+    operatorTerminal: false,
   };
 }

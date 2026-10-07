@@ -36,6 +36,19 @@ export interface CommandDeps {
   logger: Logger;
   writer: Writer;
   model: ModelClient;
+  /** True only when a person can answer prompts; see operatorAtTerminal. */
+  operatorTerminal: boolean;
+}
+
+/**
+ * Variables Claude Code sets in every command it runs. A pseudo-terminal
+ * (`script -q /dev/null capmap gate … --resolve`) satisfies isTTY, so inside an
+ * agent session a terminal does not prove a person is answering.
+ */
+const AGENT_SESSION_ENV_VARS = ["CLAUDECODE", "CLAUDE_CODE_SESSION_ID"];
+
+export function operatorAtTerminal(env: NodeJS.ProcessEnv, stdinIsTTY: boolean): boolean {
+  return stdinIsTTY && AGENT_SESSION_ENV_VARS.every((name) => env[name] === undefined);
 }
 
 export const systemClock = (): Clock => ({ now: () => new Date() });
@@ -84,5 +97,6 @@ export async function buildDeps(env: NodeJS.ProcessEnv): Promise<CommandDeps> {
     logger: new PinoLogger(env[LOG_LEVEL_ENV_VAR] ?? DEFAULT_LOG_LEVEL),
     writer: new StdoutWriter(),
     model: new DeferredAnthropicClient(env),
+    operatorTerminal: operatorAtTerminal(env, process.stdin.isTTY === true),
   };
 }

@@ -63,7 +63,7 @@ describe("runGateCommand", () => {
     // whose recorded exports no longer match by pointing at a renamed one.
     const code = await runGateCommand(deps, {
       specPath,
-      components: ["ui kit"],
+      components: [],
       resolve: false,
     });
     expect([0, 2]).toContain(code);
@@ -96,8 +96,20 @@ describe("runGateCommand", () => {
     expect(deps.writer.lines.join("\n")).toMatch(/DUPLICATION/);
   });
 
-  it("prefers explicit --component flags over the document section", async () => {
-    const specPath = await specFile("# Spec\n\n## Components\n\n- ignored\n");
+  // Audit round 2 (High): flags that replaced a declared list produced a valid
+  // record for components nobody declared, and cleared the plan.
+  it("refuses --component flags on a specification that declares its components", async () => {
+    const specPath = await specFile("# Spec\n\n## Components\n\n- billing\n");
+    const deps = await gateDeps([SHORTLIST]);
+    const code = await runGateCommand(deps, { specPath, components: ["ui kit"], resolve: false });
+    expect(code).toBe(1);
+    expect(deps.writer.lines.join("\n")).toMatch(/declares its components/);
+    expect(deps.model.calls).toBe(0);
+    expect(await readGateRecord(await resolveGateDir(specPath), "tenant-portal")).toBeNull();
+  });
+
+  it("gates --component flags on a specification without a Components section", async () => {
+    const specPath = await specFile("# Spec\n\nprose only\n");
     const deps = await gateDeps([
       SHORTLIST,
       rank([{ packageId: "alpha/ui-kit", score: 0.9, rationale: "Exact." }]),
@@ -108,6 +120,7 @@ describe("runGateCommand", () => {
       "tenant-portal",
     );
     expect(record?.components.map((c) => c.name)).toEqual(["ui kit"]);
+    expect(record?.componentsSource).toBe("flags");
   });
 
   it("fails when the document has no Components section", async () => {
@@ -159,7 +172,7 @@ describe("runGateCommand", () => {
       SHORTLIST,
       rank([{ packageId: "alpha/ui-kit", score: 0.9, rationale: "Exact." }]),
     ]);
-    await runGateCommand(deps, { specPath, components: ["ui kit"], resolve: false });
+    await runGateCommand(deps, { specPath, components: [], resolve: false });
     const record = await readGateRecord(await resolveGateDir(specPath), "tenant-portal");
     expect(record?.specContentHash).toBe(specContentHash(SPEC));
   });
@@ -174,6 +187,22 @@ describe("runGateCommand", () => {
     expect(deps.writer.lines.join("\n")).toMatch(/interactive terminal/);
     expect(deps.model.calls).toBe(0);
     expect(await readGateRecord(await resolveGateDir(specPath), "tenant-portal")).toBeNull();
+  });
+
+  // Audit round 2: the terminal check is injected, so the composition root —
+  // not the command — decides whether an operator is present.
+  it("takes the operator's presence from its dependencies", async () => {
+    const specPath = await specFile(SPEC);
+    const deps = await gateDeps([
+      SHORTLIST,
+      rank([{ packageId: "alpha/ui-kit", score: 0.9, rationale: "Exact." }]),
+    ]);
+    const code = await runGateCommand(
+      { ...deps, operatorTerminal: true },
+      { specPath, components: [], resolve: true },
+    );
+    expect(code).toBe(0);
+    expect(deps.writer.lines.join("\n")).not.toMatch(/interactive terminal/);
   });
 
   it("reports an unanswered component UNRESOLVED and exits 2 (CM-3)", async () => {

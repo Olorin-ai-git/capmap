@@ -68,6 +68,16 @@ describe("specContentHash (CM-1 binding)", () => {
     );
   });
 
+  // Audit round 2 (Low): only the copied table is exempt, so scope cannot be
+  // added beneath the heading without breaking the binding.
+  it("counts any other line under the Reuse Verdicts heading", () => {
+    const table = `${spec}\n## Reuse Verdicts\n\n| billing | REUSE |\n`;
+    expect(specContentHash(`${table}\n### New service: build our own auth\n`)).not.toBe(
+      specContentHash(table),
+    );
+    expect(specContentHash(`${table}Note.\n`)).not.toBe(specContentHash(table));
+  });
+
   it("is prefixed with its algorithm", () => {
     expect(specContentHash(spec)).toMatch(/^sha256:[0-9a-f]{64}$/);
   });

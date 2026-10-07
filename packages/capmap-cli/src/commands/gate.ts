@@ -31,8 +31,8 @@ export interface GateOptions {
 }
 
 /**
- * Component precedence, highest first: explicit flags, then a `## Components`
- * section in the document. Model extraction is deliberately absent — a gate
+ * Components come from the document's `## Components` section; `--component`
+ * flags are accepted only for a document that has none. Model extraction is deliberately absent — a gate
  * that guesses what it is gating produces a record whose hash means nothing,
  * and the operator would have no way to tell a guess from a reading.
  */
@@ -48,17 +48,23 @@ async function readSpec(
   }
 }
 
-async function componentsFor(
+function componentsFor(
   deps: CommandDeps,
   opts: GateOptions,
   specAbs: string,
-): Promise<string[] | null> {
-  if (opts.components.length > 0) return opts.components;
-
-  const markdown = await readSpec(deps, specAbs);
-  if (markdown === null) return null;
-
+  markdown: string,
+): string[] | null {
   const listed = extractComponentsFromMarkdown(markdown);
+  if (opts.components.length > 0) {
+    if (listed === null) return opts.components;
+    // Flags replacing a declared list gated components nobody declared, and
+    // the record then cleared the plan for the ones that were.
+    deps.writer.line(
+      `${specAbs} declares its components in "${COMPONENTS_HEADING}"; ` +
+        `gate them as declared, without --component.`,
+    );
+    return null;
+  }
   if (listed === null) {
     deps.writer.line(
       `${specAbs} has no "${COMPONENTS_HEADING}" section. ` +
@@ -115,10 +121,10 @@ export async function runGateCommand(
 ): Promise<number> {
   // A pipe, a CI job or an agent is not an operator. Resolving off a terminal
   // used to answer every prompt with "accept BUILD", clearing the gate unseen.
-  if (opts.resolve && process.stdin.isTTY !== true) {
+  if (opts.resolve && !deps.operatorTerminal) {
     deps.writer.line(
-      "--resolve needs an operator at an interactive terminal; stdin is not " +
-        "one. Run it yourself in a terminal, or fix what each UNRESOLVED row names.",
+      "--resolve needs an operator at an interactive terminal, outside an agent " +
+        "session. Run it yourself in a terminal, or fix what each UNRESOLVED row names.",
     );
     return EXIT_ERROR;
   }
@@ -126,10 +132,6 @@ export async function runGateCommand(
   const specAbs = isAbsolute(opts.specPath)
     ? opts.specPath
     : resolve(process.cwd(), opts.specPath);
-
-  const components = await componentsFor(deps, opts, specAbs);
-  if (components === null) return EXIT_ERROR;
-  const componentsSource = opts.components.length > 0 ? "flags" : "document";
 
   let context;
   try {
@@ -141,10 +143,13 @@ export async function runGateCommand(
     return EXIT_ERROR;
   }
 
-  // Read after the index, so a missing index is reported first; the record is
-  // bound to this text, so the specification must exist even with --component.
+  // The record is bound to this text, so it is read once and gated as read.
   const specText = await readSpec(deps, specAbs);
   if (specText === null) return EXIT_ERROR;
+
+  const components = componentsFor(deps, opts, specAbs, specText);
+  if (components === null) return EXIT_ERROR;
+  const componentsSource = opts.components.length > 0 ? "flags" : "document";
 
   let record: GateRecord;
   try {
@@ -159,7 +164,7 @@ export async function runGateCommand(
   deps.writer.line(renderVerdictTable(record));
 
   if (opts.resolve && unresolvedComponents(record).length > 0) {
-    const prompt = new StdinPrompt(deps.writer, process.stdin.isTTY === true);
+    const prompt = new StdinPrompt(deps.writer, deps.operatorTerminal);
     try {
       record = await resolveInteractively({
         record,

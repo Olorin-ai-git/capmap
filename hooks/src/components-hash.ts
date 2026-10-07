@@ -26,6 +26,7 @@ const NEXT_HEADING = /^#{1,2}[ \t]+/m;
 const LIST_ITEM = /^([ \t]*)(?:[-*+]|\d+[.)])[ \t]+(.+)$/;
 const FENCE = /^[ \t]{0,3}(`{3,}|~{3,})/;
 const VERDICTS_HEADING = /^##[ \t]+Reuse Verdicts[ \t]*$/im;
+const TABLE_ROW = /^[ \t]*\|/;
 const BOLD = /\*\*(.+?)\*\*/;
 const DESCRIPTION_SEPARATOR = /\s+[—–-]\s+|:\s+/;
 const WHITESPACE_RUN = /\s+/g;
@@ -91,8 +92,14 @@ export function specContentHash(markdown: string): string {
   if (heading !== null) {
     const after = text.slice(heading.index + heading[0].length);
     const next = NEXT_HEADING.exec(after);
+    // Only the copied table is exempt: any other line under the heading is
+    // content, or scope could be added beneath it without a re-gate.
+    const kept = (next === null ? after : after.slice(0, next.index))
+      .split("\n")
+      .filter((line) => line.trim() !== "" && !TABLE_ROW.test(line));
     text =
       text.slice(0, heading.index) +
+      kept.map((line) => `${line}\n`).join("") +
       (next === null ? "" : after.slice(next.index));
   }
   // Trailing whitespace is not content; appending a section adds a blank line.
