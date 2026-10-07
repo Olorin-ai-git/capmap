@@ -63,8 +63,15 @@ refusing writes on the strength of a default.
 | Any component `UNRESOLVED`               | block, printing the verdict table                             |
 | Repositories stale                       | allow, with a warning                                         |
 
-Globs default to `**/docs/superpowers/specs/**`, `**/specs/**`, `**/plans/**`
-and `**/docs/**/plan*.md`, and are configured in `config/scan.config.json`.
+Globs default to `**/docs/superpowers/specs/**/*.md`, `**/specs/**/*.md`,
+`**/plans/**/*.md` and `**/docs/**/plan*.md`, and are configured in
+`config/scan.config.json`. They match Markdown only, so an OpenAPI file or a
+diagram kept beside a specification is never gated as one.
+
+A gate record is named by the feature id. In a spec-kit layout
+(`specs/029-tenant-portal/spec.md`, `plan.md`, `tasks.md`, `contracts/…`) the
+numbered folder is the feature, so every file in it shares one record; a file
+named only for its role (`docs/feature-a/spec.md`) takes its directory's name.
 
 ## Bypassing
 

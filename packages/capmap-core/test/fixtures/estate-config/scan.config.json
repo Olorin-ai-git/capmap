@@ -77,11 +77,11 @@
   },
   "hook": {
     "specGlobs": [
-      "**/docs/superpowers/specs/**",
-      "**/specs/**"
+      "**/docs/superpowers/specs/**/*.md",
+      "**/specs/**/*.md"
     ],
     "planGlobs": [
-      "**/plans/**",
+      "**/plans/**/*.md",
       "**/docs/**/plan*.md"
     ]
   },

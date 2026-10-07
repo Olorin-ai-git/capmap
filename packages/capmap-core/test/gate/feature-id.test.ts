@@ -18,6 +18,11 @@ const PATHS = [
   "/abs/2026-08-02-x.MD",
   "docs/2026-08-02-redesign.md",
   "docs/2026-08-02-plan.md",
+  "specs/029-x/spec.md",
+  "specs/029-x/plan.md",
+  "specs/029-x/contracts/api.md",
+  "C:\\work\\specs\\030-y\\tasks.md",
+  "docs/feature-a/spec.md",
   "",
 ];
 
@@ -47,6 +52,30 @@ describe("deriveFeatureId", () => {
 
   it("only strips a role suffix that is its own trailing segment", () => {
     expect(deriveFeatureId("docs/2026-08-02-redesign.md")).toBe("redesign");
+  });
+});
+
+/**
+ * CM-10: the spec-kit layout names every file `spec.md`, `plan.md`, ... inside
+ * a numbered feature folder, so the basename alone made every specification
+ * one feature called "spec", and a plan never linked to its specification.
+ */
+describe("feature id from the spec folder (CM-10)", () => {
+  it("names a spec-kit feature by its numbered folder, for every file in it", () => {
+    for (const file of ["spec.md", "plan.md", "tasks.md", "research.md", "contracts/api.md"]) {
+      expect(deriveFeatureId(`/repo/specs/029-x/${file}`)).toBe("029-x");
+    }
+  });
+
+  it("keeps two spec-kit features apart", () => {
+    expect(deriveFeatureId("specs/029-x/spec.md")).not.toBe(
+      deriveFeatureId("specs/030-y/spec.md"),
+    );
+  });
+
+  it("names a generically named file by its directory", () => {
+    expect(deriveFeatureId("docs/feature-a/spec.md")).toBe("feature-a");
+    expect(deriveFeatureId("docs/feature-a/plan.md")).toBe("feature-a");
   });
 });
 
