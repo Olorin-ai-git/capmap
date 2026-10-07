@@ -14,7 +14,6 @@ import { silentLogger } from "../support/doubles.js";
 
 const ENRICH = {
   model: "m",
-  effort: "medium",
   maxRetries: 0,
   concurrency: 1,
   packageMaxTokens: 512,
@@ -26,7 +25,6 @@ const ENRICH = {
 const MATCH = {
   maxCandidates: 10,
   model: "m",
-  effort: "high",
   selectMaxTokens: 100,
   rankMaxTokens: 100,
   maxRationaleChars: 200,

@@ -123,7 +123,6 @@ export async function enrichDomainChunk(
       system: DOMAIN_SYSTEM_PROMPT,
       user,
       model: args.config.model,
-      effort: args.config.effort,
       maxTokens: args.config.domainMaxTokens,
       });
     } catch (error) {

@@ -167,7 +167,7 @@ export function decide(input: DecideInput): Decision {
     };
   }
 
-  // Filtered here rather than through the core helper: the hook has a 50 ms budget
+  // Filtered here rather than through the core helper: the hook has a 100 ms budget
   // and must not pull the schema module, and its dependencies, into its start-up.
   const unresolved = input.record.components.filter(
     (c) => c.verdict === BLOCKING_VERDICT,

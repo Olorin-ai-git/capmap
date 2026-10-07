@@ -11,14 +11,13 @@ import { STRENGTH, applyVerdict } from "./verdict.js";
 interface Located {
   entry: PackageEntry;
   tier: RepoIndex["tier"];
-  isMinor: boolean;
 }
 
 export function locate(repos: RepoIndex[], packageId: string): Located | null {
   for (const repo of repos) {
     const entry = repo.packages.find((candidate) => candidate.id === packageId);
     if (entry !== undefined) {
-      return { entry, tier: repo.tier, isMinor: false };
+      return { entry, tier: repo.tier };
     }
   }
   return null;
@@ -108,7 +107,6 @@ export function pickWinner(
         score: ranking.score,
         tier: located.tier,
         verified: true,
-        isMinor: located.isMinor,
         thresholds,
       })
     ];
@@ -209,7 +207,6 @@ export async function resolveComponent(
     score: winner.score,
     tier: located.tier,
     verified: verification.ok,
-    isMinor: located.isMinor,
     thresholds: args.thresholds,
   });
   const resolved = verdict !== "BUILD" && verdict !== "UNRESOLVED";

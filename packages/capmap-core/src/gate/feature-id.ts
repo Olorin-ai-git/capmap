@@ -2,7 +2,7 @@
  * Feature identifier derivation for `@capmap/core`.
  *
  * The PreToolUse hook keeps a byte-identical copy at `hooks/src/feature-id.ts`, because it
- * must start inside a 50 ms budget and cannot afford to load this package. The two copies
+ * must start inside a 100 ms budget and cannot afford to load this package. The two copies
  * are pinned together by `test/gate/feature-id.test.ts`, which imports both and asserts
  * they agree; that test is the reason the duplication is safe rather than a liability.
  *

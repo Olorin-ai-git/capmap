@@ -27,39 +27,54 @@ describe("AnthropicModelClient.fromEnv", () => {
   });
 });
 
-describe("AnthropicModelClient response handling", () => {
-  /**
-   * The SDK returns a content array that can hold blocks other than text.
-   * Joining only the text blocks is what makes the caller's JSON parsing work;
-   * concatenating everything would corrupt it.
-   */
-  function extract(content: Array<{ type: string; text?: string }>): string {
-    return content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text ?? "")
-      .join("");
+/**
+ * CM-14: this used to test a local copy of the extraction code, so the real
+ * client could change without a test noticing, and a request field (`effort`)
+ * was accepted by every caller and never sent. These drive the real class
+ * through an injected messages API.
+ */
+describe("AnthropicModelClient request and response", () => {
+  function recordingApi(content: Array<{ type: string; text?: string }>) {
+    const sent: Array<Record<string, unknown>> = [];
+    return {
+      sent,
+      messages: {
+        create: async (body: Record<string, unknown>) => {
+          sent.push(body);
+          return { content };
+        },
+      },
+    };
   }
 
-  it("joins consecutive text blocks", () => {
-    expect(
-      extract([
-        { type: "text", text: '{"summary":' },
-        { type: "text", text: '"x"}' },
-      ]),
-    ).toBe('{"summary":"x"}');
+  const request = { system: "sys", user: "hello", model: "claude-x", maxTokens: 77 };
+
+  it("sends every field of the request it is given", async () => {
+    const api = recordingApi([{ type: "text", text: "ok" }]);
+    await new AnthropicModelClient(api as never).complete(request);
+    expect(api.sent).toEqual([
+      {
+        model: "claude-x",
+        max_tokens: 77,
+        system: "sys",
+        messages: [{ role: "user", content: "hello" }],
+      },
+    ]);
+    expect(Object.keys(request).sort()).toEqual(["maxTokens", "model", "system", "user"]);
   });
 
-  it("drops non-text blocks", () => {
-    expect(
-      extract([
-        { type: "thinking" },
-        { type: "text", text: "kept" },
-        { type: "tool_use" },
-      ]),
-    ).toBe("kept");
+  it("joins consecutive text blocks", async () => {
+    const api = recordingApi([
+      { type: "text", text: '{"summary":' },
+      { type: "text", text: '"x"}' },
+    ]);
+    expect(await new AnthropicModelClient(api as never).complete(request)).toBe('{"summary":"x"}');
   });
 
-  it("yields an empty string when no text block is present", () => {
-    expect(extract([{ type: "thinking" }])).toBe("");
+  it("drops non-text blocks, and yields an empty string when none is text", async () => {
+    const mixed = recordingApi([{ type: "thinking" }, { type: "text", text: "kept" }, { type: "tool_use" }]);
+    expect(await new AnthropicModelClient(mixed as never).complete(request)).toBe("kept");
+    const none = recordingApi([{ type: "thinking" }]);
+    expect(await new AnthropicModelClient(none as never).complete(request)).toBe("");
   });
 });

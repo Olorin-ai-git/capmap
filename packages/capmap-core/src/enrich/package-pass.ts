@@ -73,7 +73,6 @@ async function enrichOne(
         system: PACKAGE_SYSTEM_PROMPT,
         user,
         model: args.config.model,
-        effort: args.config.effort,
         maxTokens: args.config.packageMaxTokens,
       });
     } catch (error) {

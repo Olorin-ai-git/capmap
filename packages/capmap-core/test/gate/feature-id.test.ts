@@ -3,7 +3,7 @@ import { deriveFeatureId } from "../../src/gate/feature-id.js";
 import { deriveFeatureId as deriveInHook } from "../../../../hooks/src/feature-id.js";
 
 /**
- * The hook keeps its own dependency-free copy so it can start inside its 50 ms budget
+ * The hook keeps its own dependency-free copy so it can start inside its 100 ms budget
  * without loading `@capmap/core`. These paths are the contract between the two copies:
  * if they ever disagree, the hook looks for a gate record the CLI never wrote.
  */

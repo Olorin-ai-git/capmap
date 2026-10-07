@@ -27,7 +27,6 @@ export interface ModelRequest {
   system: string;
   user: string;
   model: string;
-  effort: string;
   maxTokens: number;
 }
 

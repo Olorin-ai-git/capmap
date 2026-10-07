@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
  * A dependency-free mirror of the component extraction and hashing in
  * `@capmap/core`.
  *
- * The hook runs on every Write and Edit and has a 50 ms budget, so it must not
+ * The hook runs on every Write and Edit and has a 100 ms budget, so it must not
  * load the core bundle — that import would cost more than the whole decision.
  * The duplication is deliberate and is pinned by a conformance test that
  * imports both copies and asserts they agree; if they ever diverge, the hook

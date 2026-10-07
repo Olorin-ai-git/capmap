@@ -55,7 +55,6 @@ export async function selectCandidateDomains(
         `Return at most ${args.config.maxCandidates} domains per component.`,
       ].join("\n\n"),
       model: args.config.model,
-      effort: args.config.effort,
       maxTokens: args.maxTokens,
     });
   } catch (error) {
@@ -144,7 +143,6 @@ export async function rankPackagesForComponent(
         system: RANK_SYSTEM_PROMPT,
         user,
         model: args.config.model,
-        effort: args.config.effort,
         maxTokens: args.maxTokens,
       });
     } catch (error) {

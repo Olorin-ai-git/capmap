@@ -2,7 +2,7 @@
  * Feature identifier derivation, shared by the PreToolUse hook and `@capmap/core`.
  *
  * This module is deliberately dependency-free — not even `node:path` — because the hook
- * loads it inside a 50 ms budget and must not pull in the core bundle. It is a copy of
+ * loads it inside a 100 ms budget and must not pull in the core bundle. It is a copy of
  * `packages/capmap-core/src/gate/feature-id.ts` rather than an import of it, because that
  * file sits outside this package and TypeScript will not emit a project whose sources
  * escape its `rootDir`. The copies cannot silently diverge: the core suite

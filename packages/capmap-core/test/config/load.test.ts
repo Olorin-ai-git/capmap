@@ -10,7 +10,6 @@ async function fixtureConfigDir(overrides: Record<string, unknown> = {}) {
   const scan = {
     root: null,
     excludePaths: ["node_modules"],
-    excludeRepoGlobs: ["*-wt"],
     internalScopes: ["@olorin/"],
     python: { subpackageMaxDepth: 3 },
     search: { minTermOverlap: 0.5, minPartialTermLength: 4, minQueryTermLength: 2 },
@@ -38,14 +37,12 @@ async function fixtureConfigDir(overrides: Record<string, unknown> = {}) {
     matching: {
       maxCandidates: 5,
       model: "claude-opus-5",
-      effort: "high",
       selectMaxTokens: 4096,
       rankMaxTokens: 1024,
       maxRationaleChars: 400,
     },
     enrichment: {
       model: "claude-sonnet-5",
-      effort: "medium",
       maxRetries: 2,
       concurrency: 8,
       packageMaxTokens: 512,

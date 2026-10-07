@@ -16,9 +16,6 @@ export const TIER_CAP: Record<RepoTier, Verdict> = {
   external: "REFERENCE",
 };
 
-/** The cap applied to a minor entry regardless of the tier it came from. */
-const MINOR_CAP: Verdict = "REFERENCE";
-
 /** Relative ordering used to clamp a scored verdict down to a cap. */
 export const STRENGTH: Record<Verdict, number> = {
   UNRESOLVED: -1,
@@ -32,7 +29,6 @@ export interface ApplyVerdictArgs {
   score: number;
   tier: RepoTier;
   verified: boolean;
-  isMinor: boolean;
   thresholds: ScanConfig["verdicts"];
 }
 
@@ -53,6 +49,6 @@ export function applyVerdict(args: ApplyVerdictArgs): Verdict {
         ? "EXTEND"
         : "BUILD";
 
-  const cap: Verdict = args.isMinor ? MINOR_CAP : TIER_CAP[args.tier];
+  const cap: Verdict = TIER_CAP[args.tier];
   return STRENGTH[raw] > STRENGTH[cap] ? cap : raw;
 }

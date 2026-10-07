@@ -37,7 +37,6 @@ const RATE_LIMIT = "429 rate limit exceeded";
 const NOW = new Date("2026-08-02T00:00:00.000Z");
 const ENRICH_CONFIG = {
   model: "m",
-  effort: "medium",
   maxRetries: 2,
   concurrency: 2,
   packageMaxTokens: 512,
@@ -165,7 +164,6 @@ describe("the gate survives a refusing model", () => {
       config: {
   maxCandidates: 5,
   model: "m",
-  effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
   maxRationaleChars: 400,
@@ -186,7 +184,6 @@ describe("the gate survives a refusing model", () => {
       config: {
   maxCandidates: 5,
   model: "m",
-  effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
   maxRationaleChars: 400,
@@ -220,7 +217,6 @@ describe("the gate survives a refusing model", () => {
       matching: {
   maxCandidates: 5,
   model: "m",
-  effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
   maxRationaleChars: 400,

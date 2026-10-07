@@ -18,7 +18,6 @@ const THRESHOLDS = {
 const MATCHING = {
   maxCandidates: 5,
   model: "m",
-  effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
   maxRationaleChars: 400,

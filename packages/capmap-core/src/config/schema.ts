@@ -26,7 +26,6 @@ const WEIGHT_SUM_TOLERANCE = 1e-6;
 export const ScanConfigSchema = z.object({
   root: z.string().min(1).nullable(),
   excludePaths: z.array(z.string().min(1)).min(1),
-  excludeRepoGlobs: z.array(z.string().min(1)),
   internalScopes: z.array(z.string().min(1)).min(1),
   python: z.object({
     /**
@@ -81,7 +80,6 @@ export const ScanConfigSchema = z.object({
   matching: z.object({
     maxCandidates: z.number().int().positive(),
     model: z.string().min(1),
-    effort: z.string().min(1),
     /** Token ceiling for the one call that shortlists domains for all components. */
     selectMaxTokens: z.number().int().positive(),
     /** Token ceiling for each per-component ranking call. */
@@ -91,7 +89,6 @@ export const ScanConfigSchema = z.object({
   }),
   enrichment: z.object({
     model: z.string().min(1),
-    effort: z.string().min(1),
     maxRetries: z.number().int().nonnegative(),
     concurrency: z.number().int().positive(),
     /** Response ceiling for one package summary. */
