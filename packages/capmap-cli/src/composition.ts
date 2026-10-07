@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   loadConfig,
@@ -55,9 +55,36 @@ class DeferredAnthropicClient implements ModelClient {
   }
 }
 
+function workspaceRoot(): string {
+  return resolve(dirname(fileURLToPath(import.meta.url)), ...WORKSPACE_ROOT_HOPS);
+}
+
 function defaultConfigDir(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  return join(here, ...WORKSPACE_ROOT_HOPS, CONFIG_DIR_NAME);
+  return join(workspaceRoot(), CONFIG_DIR_NAME);
+}
+
+function isInside(parentAbs: string, childAbs: string): boolean {
+  const rel = relative(parentAbs, childAbs);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+/**
+ * An index describes the estate it was built from. One built from
+ * repositories outside this checkout must not be written into it, where the
+ * next commit would publish it; only the bundled example estate is indexed in
+ * place. Paths are compared lexically, so a symlink into the checkout is not
+ * seen.
+ */
+function assertIndexPlacement(indexDirAbs: string, estateRootAbs: string): void {
+  const checkout = workspaceRoot();
+  if (isInside(checkout, indexDirAbs) && !isInside(checkout, estateRootAbs)) {
+    throw new Error(
+      `refusing to keep the index of ${estateRootAbs} in ${indexDirAbs}: an estate ` +
+        `outside this checkout must have its index outside this checkout too. Point ` +
+        `${CONFIG_DIR_ENV_VAR} at a configuration directory outside the checkout, or ` +
+        `make "index.dir" in scan.config.json an absolute path outside it.`,
+    );
+  }
 }
 
 /** The index lives beside the configuration directory unless made absolute. */
@@ -74,11 +101,11 @@ export function packageVersion(): string {
 export async function buildDeps(env: NodeJS.ProcessEnv): Promise<CommandDeps> {
   const configDir = env[CONFIG_DIR_ENV_VAR] ?? defaultConfigDir();
   const config = await loadConfig({ configDir, env });
+  const indexDirAbs = resolve(resolveIndexDir(configDir, config.scan.index.dir));
+  assertIndexPlacement(indexDirAbs, resolve(config.root));
   return {
     config,
-    store: new IndexStore({
-      indexDirAbs: resolveIndexDir(configDir, config.scan.index.dir),
-    }),
+    store: new IndexStore({ indexDirAbs }),
     git: new NodeGit(),
     clock: systemClock(),
     logger: new PinoLogger(env[LOG_LEVEL_ENV_VAR] ?? DEFAULT_LOG_LEVEL),

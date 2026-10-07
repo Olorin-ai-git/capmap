@@ -17,7 +17,7 @@ telling you to build it:
 cd /path/to/capability-map
 pnpm install && pnpm -r build
 CAPMAP_ROOT=/path/to/your/estate \
-CAPMAP_CONFIG_DIR=/path/to/capability-map/config \
+CAPMAP_CONFIG_DIR=/path/outside/the/checkout/config \
 ANTHROPIC_API_KEY=… \
   node packages/capmap-cli/dist/bin.js scan
 ```
@@ -35,7 +35,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "CAPMAP_CONFIG_DIR=/path/to/capability-map/config node /path/to/capability-map/hooks/dist/gate-hook.js"
+            "command": "CAPMAP_CONFIG_DIR=/path/outside/the/checkout/config node /path/to/capability-map/hooks/dist/gate-hook.js"
           }
         ]
       }
@@ -43,6 +43,9 @@ Add to `~/.claude/settings.json`:
   }
 }
 ```
+
+The configuration directory, and the index written beside it, belong outside
+the capability-map checkout: an index of a real estate is refused inside it.
 
 `CAPMAP_CONFIG_DIR` is required. Without it the hook allows everything rather
 than guessing — a guard that cannot find its configuration must not start

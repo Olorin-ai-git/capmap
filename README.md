@@ -75,7 +75,12 @@ git clone https://github.com/Olorin-ai-git/capmap && cd capmap
 pnpm install && pnpm -r build
 ```
 
-Describe your repositories in `config/repos.json` — each entry is a path
+Your index describes your private code, so keep it out of this checkout: copy
+`config/` to a directory of your own (`cp -r config ~/.capmap/config`) and the
+index is written beside it (`~/.capmap/index`). `capmap` refuses to write the
+index of an estate outside this checkout into this checkout's `index/`.
+
+Describe your repositories in that copy's `repos.json` — each entry is a path
 relative to `scan.config.json`'s `root`, plus a tier:
 
 ```json
@@ -103,7 +108,7 @@ Tiers are the load-bearing part. `core` and `active` may be recommended for
 import; `archived` and `external` never can be.
 
 ```bash
-export CAPMAP_CONFIG_DIR="$PWD/config"
+export CAPMAP_CONFIG_DIR="$HOME/.capmap/config"
 ANTHROPIC_API_KEY=... pnpm exec capmap scan     # index every configured repository
 
 pnpm exec capmap search billing                 # what already does this? no API key needed
