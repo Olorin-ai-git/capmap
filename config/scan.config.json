@@ -72,7 +72,8 @@
     "model": "claude-opus-5",
     "effort": "high",
     "selectMaxTokens": 6000,
-    "rankMaxTokens": 4000
+    "rankMaxTokens": 4000,
+    "maxRationaleChars": 400
   },
   "enrichment": {
     "model": "claude-sonnet-5",
@@ -81,7 +82,9 @@
     "concurrency": 8,
     "packageMaxTokens": 512,
     "domainMaxTokens": 4096,
-    "maxPackagesPerDomainCall": 25
+    "maxPackagesPerDomainCall": 25,
+    "maxExcerptChars": 4000,
+    "maxSummaryChars": 600
   },
   "hook": {
     "specGlobs": [

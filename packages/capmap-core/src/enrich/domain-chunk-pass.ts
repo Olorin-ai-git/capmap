@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { DomainEntry, PackageEntry } from "../model/index-schema.js";
 import { DOMAIN_SYSTEM_PROMPT, buildDomainPrompt } from "./domain-prompts.js";
 import type { EnrichDomainsArgs } from "./domain-pass.js";
+import { sanitiseModelText } from "./untrusted.js";
 
 
 const MAX_TAGS = 6;
@@ -78,13 +79,14 @@ function toDomains(
       ...new Set(candidate.domainTags.filter((t) => allowed.has(t))),
     ].slice(0, MAX_TAGS);
     if (packages.length === 0 || domainTags.length === 0) continue;
+    if (sanitiseModelText(candidate.title, 1) === "" || sanitiseModelText(candidate.summary, 1) === "") continue;
     const members = args.packages.filter((p) => packages.includes(p.id));
     domains.push({
       id: candidate.id,
       repo: args.repo.id,
       tier: args.repo.tier,
-      title: candidate.title,
-      summary: candidate.summary,
+      title: sanitiseModelText(candidate.title, args.config.maxSummaryChars),
+      summary: sanitiseModelText(candidate.summary, args.config.maxSummaryChars),
       domainTags,
       packages,
       stack: candidate.stack,
@@ -109,6 +111,7 @@ export async function enrichDomainChunk(
     args.repoRootAbs,
     args.packages,
     args.vocabulary,
+    args.config.maxExcerptChars,
   );
 
   for (let attempt = 0; attempt <= args.config.maxRetries; attempt += 1) {

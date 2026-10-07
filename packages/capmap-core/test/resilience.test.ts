@@ -43,6 +43,8 @@ const ENRICH_CONFIG = {
   packageMaxTokens: 512,
   domainMaxTokens: 4096,
   maxPackagesPerDomainCall: 25,
+  maxExcerptChars: 4000,
+  maxSummaryChars: 600,
 };
 
 const entry: PackageEntry = {
@@ -166,6 +168,7 @@ describe("the gate survives a refusing model", () => {
   effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
+  maxRationaleChars: 400,
 },
       logger: silentLogger(),
       maxTokens: 2048,
@@ -186,6 +189,7 @@ describe("the gate survives a refusing model", () => {
   effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
+  maxRationaleChars: 400,
 },
       logger: silentLogger(),
       maxRetries: 1,
@@ -219,6 +223,7 @@ describe("the gate survives a refusing model", () => {
   effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
+  maxRationaleChars: 400,
 },
       selectMaxTokens: 2048,
       rankMaxTokens: 512,

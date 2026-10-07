@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { RepoIndex } from "../model/index-schema.js";
+import { fence } from "../enrich/untrusted.js";
 
 /**
  * Response shapes for the two matching calls, the tolerant JSON reader that
@@ -62,6 +63,10 @@ export function extractJson(raw: string): unknown {
  * shortlisting auditable — you can read exactly what the model was shown.
  */
 export function renderCatalogue(repos: RepoIndex[]): string {
+  return fence("CATALOGUE", renderCatalogueLines(repos));
+}
+
+function renderCatalogueLines(repos: RepoIndex[]): string {
   return repos
     .flatMap((repo) =>
       repo.domains.map(

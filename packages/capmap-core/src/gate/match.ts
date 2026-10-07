@@ -1,6 +1,7 @@
 import type { ScanConfig } from "../config/schema.js";
 import type { PackageEntry, RepoIndex } from "../model/index-schema.js";
 import type { Logger, ModelClient } from "../ports/index.js";
+import { fence, sanitiseModelText } from "../enrich/untrusted.js";
 import {
   RANK_SYSTEM_PROMPT,
   SELECT_SYSTEM_PROMPT,
@@ -97,6 +98,10 @@ export interface RankArgs {
 }
 
 function renderCandidates(candidates: PackageEntry[]): string {
+  return fence("CANDIDATES", renderCandidateLines(candidates));
+}
+
+function renderCandidateLines(candidates: PackageEntry[]): string {
   return candidates
     .map(
       (p) =>
@@ -164,7 +169,12 @@ export async function rankPackagesForComponent(
           seen.add(ranking.packageId);
           return true;
         })
-        .sort((a, b) => b.score - a.score || a.packageId.localeCompare(b.packageId));
+        .sort((a, b) => b.score - a.score || a.packageId.localeCompare(b.packageId))
+        // Rationales are printed in gate output and stored in the record.
+        .map((ranking) => ({
+          ...ranking,
+          rationale: sanitiseModelText(ranking.rationale, args.config.maxRationaleChars),
+        }));
       if (kept.length > 0) return kept;
     }
     args.logger.warn("package ranking produced an unusable result", {

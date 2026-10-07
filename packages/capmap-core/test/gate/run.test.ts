@@ -21,6 +21,7 @@ const MATCHING = {
   effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
+  maxRationaleChars: 400,
 };
 
 const uiKit = {

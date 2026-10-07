@@ -3,6 +3,7 @@ import type { ScanConfig } from "../config/schema.js";
 import type { PackageEntry } from "../model/index-schema.js";
 import type { Logger, ModelClient } from "../ports/index.js";
 import { PACKAGE_SYSTEM_PROMPT, buildPackagePrompt } from "./prompts.js";
+import { sanitiseModelText } from "./untrusted.js";
 
 const MAX_TAGS = 6;
 
@@ -28,6 +29,7 @@ interface PackageEnrichment {
 function parseResponse(
   raw: string,
   vocabulary: string[],
+  maxSummaryChars: number,
 ): PackageEnrichment | null {
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
@@ -45,7 +47,9 @@ function parseResponse(
     ...new Set(result.data.domainTags.filter((t) => allowed.has(t))),
   ].slice(0, MAX_TAGS);
   if (tags.length === 0) return null;
-  return { summary: result.data.summary, domainTags: tags };
+  const summary = sanitiseModelText(result.data.summary, maxSummaryChars);
+  if (summary === "") return null;
+  return { summary, domainTags: tags };
 }
 
 async function enrichOne(
@@ -56,6 +60,7 @@ async function enrichOne(
     entry,
     args.repoRootAbs,
     args.vocabulary,
+    args.config.maxExcerptChars,
   );
   for (let attempt = 0; attempt <= args.config.maxRetries; attempt += 1) {
     // A thrown error is treated exactly like unusable output. The model is a
@@ -79,7 +84,7 @@ async function enrichOne(
       });
       continue;
     }
-    const parsed = parseResponse(raw, args.vocabulary);
+    const parsed = parseResponse(raw, args.vocabulary, args.config.maxSummaryChars);
     if (parsed !== null)
       return { ...entry, ...parsed, enrichmentFailed: false };
     args.logger.warn("package enrichment produced invalid output", {

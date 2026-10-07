@@ -86,6 +86,8 @@ export const ScanConfigSchema = z.object({
     selectMaxTokens: z.number().int().positive(),
     /** Token ceiling for each per-component ranking call. */
     rankMaxTokens: z.number().int().positive(),
+    /** Longest ranking rationale kept; it is printed and stored. */
+    maxRationaleChars: z.number().int().positive(),
   }),
   enrichment: z.object({
     model: z.string().min(1),
@@ -102,6 +104,10 @@ export const ScanConfigSchema = z.object({
      * the estate once ended up with no domains at all.
      */
     maxPackagesPerDomainCall: z.number().int().positive(),
+    /** Characters of each README, CLAUDE.md or entry file shown to the model. */
+    maxExcerptChars: z.number().int().positive(),
+    /** Longest package or domain summary or title stored in the index. */
+    maxSummaryChars: z.number().int().positive(),
   }),
   hook: z.object({
     /**

@@ -8,6 +8,8 @@ const CFG = { model: "m", effort: "medium", maxRetries: 1, concurrency: 1,
   packageMaxTokens: 512,
   domainMaxTokens: 4096,
   maxPackagesPerDomainCall: 25,
+  maxExcerptChars: 4000,
+  maxSummaryChars: 600,
 };
 const REPO = {
   id: "alpha",

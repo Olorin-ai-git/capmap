@@ -41,6 +41,7 @@ async function fixtureConfigDir(overrides: Record<string, unknown> = {}) {
       effort: "high",
       selectMaxTokens: 4096,
       rankMaxTokens: 1024,
+      maxRationaleChars: 400,
     },
     enrichment: {
       model: "claude-sonnet-5",
@@ -50,6 +51,8 @@ async function fixtureConfigDir(overrides: Record<string, unknown> = {}) {
       packageMaxTokens: 512,
       domainMaxTokens: 4096,
       maxPackagesPerDomainCall: 25,
+      maxExcerptChars: 4000,
+      maxSummaryChars: 600,
     },
     hook: {
       specGlobs: ["**/specs/**"],

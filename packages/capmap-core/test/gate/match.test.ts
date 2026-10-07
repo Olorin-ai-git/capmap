@@ -15,6 +15,7 @@ const CFG = {
   effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
+  maxRationaleChars: 400,
 };
 const SELECT_TOKENS = 2048;
 const RANK_TOKENS = 512;
