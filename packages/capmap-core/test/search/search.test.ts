@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { searchIndex } from "../../src/search/search.js";
 import {
   INDEX_SCHEMA_VERSION,
@@ -67,28 +70,61 @@ const repos: RepoIndex[] = [
   },
 ];
 
+const SCORING = { minTermOverlap: 0.5, minPartialTermLength: 4, minQueryTermLength: 2 };
+
 describe("searchIndex", () => {
   it("ranks the matching domain above its packages", () => {
-    const hits = searchIndex({ repos, query: "billing", limit: 10 });
+    const hits = searchIndex({ scoring: SCORING, repos, query: "billing", limit: 10 });
     expect(hits[0]!.id).toBe("angainor/multi-tenant-billing");
     expect(hits[0]!.layer).toBe("domain");
   });
 
   it("matches on exported symbol names", () => {
-    const hits = searchIndex({ repos, query: "createSubscription", limit: 10 });
+    const hits = searchIndex({ scoring: SCORING, repos, query: "createSubscription", limit: 10 });
     expect(hits.map((h) => h.id)).toContain("angainor/billing");
   });
 
   it("floors minor entries below real entries", () => {
-    const hits = searchIndex({ repos, query: "billing", limit: 10 });
+    const hits = searchIndex({ scoring: SCORING, repos, query: "billing", limit: 10 });
     expect(hits.at(-1)!.layer).toBe("minor");
   });
 
   it("returns nothing for a query with no term overlap", () => {
-    expect(searchIndex({ repos, query: "holography", limit: 10 })).toEqual([]);
+    expect(searchIndex({ scoring: SCORING, repos, query: "holography", limit: 10 })).toEqual([]);
   });
 
   it("honours the limit", () => {
-    expect(searchIndex({ repos, query: "billing", limit: 1 })).toHaveLength(1);
+    expect(searchIndex({ scoring: SCORING, repos, query: "billing", limit: 1 })).toHaveLength(1);
+  });
+});
+
+/**
+ * CM-13: two-way substring matching let any short token match inside any word,
+ * so "kubernetes operator" returned five hits and the skill's "nothing covers
+ * this" branch could never fire.
+ */
+const here = dirname(fileURLToPath(import.meta.url));
+
+describe("search can answer nothing (CM-13)", () => {
+  const example: RepoIndex[] = ["alpha", "beta", "vendor-toolkit"].map(
+    (id) =>
+      JSON.parse(
+        readFileSync(join(here, "..", "..", "..", "..", "index", "repos", `${id}.json`), "utf8"),
+      ) as RepoIndex,
+  );
+  const search = (query: string): string[] =>
+    searchIndex({ scoring: SCORING, repos: example, query, limit: 10 }).map((hit) => hit.id);
+
+  it.each(["kubernetes operator", "x y", "a", "audit log"])(
+    "returns nothing for %s, which the example estate does not hold",
+    (query) => {
+      expect(search(query)).toEqual([]);
+    },
+  );
+
+  it("still finds what is there, including by a meaningful prefix", () => {
+    expect(search("authentication")).toContain("alpha/auth");
+    expect(search("auth")).toContain("beta/auth");
+    expect(search("billing stripe")).toContain("alpha/billing");
   });
 });

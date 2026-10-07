@@ -41,6 +41,7 @@ export function readTools(deps: ToolDeps): ToolDefinition[] {
         const hits = searchIndex({
           repos,
           query: String(args["query"] ?? ""),
+          scoring: deps.config.scan.search,
           limit:
             typeof args["limit"] === "number" ? args["limit"] : DEFAULT_LIMIT,
           ...(asString(args["tier"]) === undefined

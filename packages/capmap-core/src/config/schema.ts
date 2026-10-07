@@ -48,6 +48,20 @@ export const ScanConfigSchema = z.object({
     recencyHalfLifeDays: z.number().positive(),
   }),
   maturity: z.object({ gaRecencyDays: z.number().positive() }),
+  search: z.object({
+    /**
+     * Fraction of the query's terms an entry must match, before layer
+     * weighting, to be a hit at all — so "nothing covers this" is answerable.
+     */
+    minTermOverlap: z.number().min(0).max(1),
+    /**
+     * Shortest token that may earn substring credit. Without it "a" or "op"
+     * matched inside every longer word and every query returned something.
+     */
+    minPartialTermLength: z.number().int().positive(),
+    /** Query words shorter than this ("a", "x") carry no meaning and are ignored. */
+    minQueryTermLength: z.number().int().positive(),
+  }),
   verdicts: z
     .object({
       reuseThreshold: z.number().min(0).max(1),

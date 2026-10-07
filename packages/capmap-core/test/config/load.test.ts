@@ -13,6 +13,7 @@ async function fixtureConfigDir(overrides: Record<string, unknown> = {}) {
     excludeRepoGlobs: ["*-wt"],
     internalScopes: ["@olorin/"],
     python: { subpackageMaxDepth: 3 },
+    search: { minTermOverlap: 0.5, minPartialTermLength: 4, minQueryTermLength: 2 },
     significance: {
       threshold: 0.45,
       weights: {

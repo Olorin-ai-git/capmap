@@ -54,6 +54,11 @@
   "maturity": {
     "gaRecencyDays": 180
   },
+  "search": {
+    "minTermOverlap": 0.5,
+    "minPartialTermLength": 4,
+    "minQueryTermLength": 2
+  },
   "verdicts": {
     "reuseThreshold": 0.7,
     "extendThreshold": 0.5,
