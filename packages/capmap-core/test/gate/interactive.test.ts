@@ -77,6 +77,7 @@ function record(component: Partial<ComponentVerdict> = {}): GateRecord {
     specPath: "specs/x.md",
     feature: "x",
     componentsHash: `sha256:${"a".repeat(64)}`,
+    specContentHash: null,
   componentsSource: "document" as const,
     generatedAt: "2026-08-02T00:00:00.000Z",
     indexGeneratedAt: "2026-07-27T00:00:00.000Z",
@@ -224,5 +225,47 @@ describe("resolveInteractively", () => {
     });
     expect(out.componentsHash).toBe(record().componentsHash);
     expect(out.feature).toBe("x");
+  });
+});
+
+/**
+ * Audit CM-2: a matcher outage was cleared by "accept BUILD", and re-checking a
+ * component with no candidate silently became BUILD. Neither is a comparison
+ * against the estate, so neither may clear the component.
+ */
+describe("resolveInteractively never clears a component nobody compared (CM-2)", () => {
+  it.each(["matcher-unavailable", "matcher-unanswered"])(
+    "keeps a %s component UNRESOLVED when BUILD is chosen",
+    async (check) => {
+      const original = record({ failedChecks: [check], bestCandidate: null, score: 0 });
+      const out = await resolveInteractively({
+        ...base,
+        record: original,
+        repos: repos("core"),
+        prompt: scriptedPrompt([CHOICE_BUILD]),
+      });
+      expect(out.components[0]).toEqual(original.components[0]);
+    },
+  );
+
+  it("keeps a component with no candidate UNRESOLVED on re-check", async () => {
+    const original = record({ bestCandidate: null });
+    const out = await resolveInteractively({
+      ...base,
+      record: original,
+      repos: repos("core"),
+      prompt: scriptedPrompt([CHOICE_RECHECK]),
+    });
+    expect(out.components[0]!.verdict).toBe("UNRESOLVED");
+  });
+
+  it("still lets the operator name a capability for an outage", async () => {
+    const out = await resolveInteractively({
+      ...base,
+      record: record({ failedChecks: ["matcher-unavailable"], bestCandidate: null }),
+      repos: repos("core"),
+      prompt: scriptedPrompt([CHOICE_PICK], ["alpha/ui-kit"]),
+    });
+    expect(out.components[0]!.verdict).toBe("REUSE");
   });
 });

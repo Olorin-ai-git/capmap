@@ -234,7 +234,7 @@ describe("selectCandidateDomains", () => {
     expect(result?.get("billing")).toHaveLength(1);
   });
 
-  it("yields an empty shortlist for a component the model omitted", async () => {
+  it("yields null, not an empty shortlist, for a component the model omitted (CM-3)", async () => {
     const model = scriptedModel([JSON.stringify({ selections: [] })]);
     const result = await selectCandidateDomains({
       components: ["holography"],
@@ -244,7 +244,7 @@ describe("selectCandidateDomains", () => {
       logger: silentLogger(),
       maxTokens: SELECT_TOKENS,
     });
-    expect(result?.get("holography")).toEqual([]);
+    expect(result?.get("holography")).toBeNull();
   });
 
   it("reports unavailable and warns when the model returns unusable output", async () => {

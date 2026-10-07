@@ -127,6 +127,7 @@ const manifest: IndexManifest = {
 
 const base = {
   specPath: "docs/specs/2026-08-02-x-design.md",
+  specText: "# X\n\n## Components\n- ui kit\n",
   componentsSource: "document" as const,
   rootAbs: fixtureEstateRoot(),
   manifest,
@@ -181,8 +182,8 @@ describe("runGate", () => {
     expect(record.components[0]!.verdict).toBe("REFERENCE");
   });
 
-  it("returns BUILD with no target when nothing is shortlisted", async () => {
-    const model = scriptedModel([JSON.stringify({ selections: [] })]);
+  it("returns BUILD with no target when the model shortlists nothing", async () => {
+    const model = scriptedModel([shortlist("holography", [])]);
     const record = await runGate({
       ...base,
       components: ["holography"],
@@ -249,6 +250,67 @@ describe("runGate", () => {
     expect(record.staleRepos).toEqual(["alpha"]);
     expect(record.feature).toBe("x");
     expect(record.components).toHaveLength(2);
+  });
+});
+
+/**
+ * Audit CM-3, PoC 2a-2c (audit-pocs/capmap/t.mjs), inverted: a component the
+ * model omitted or re-spelled got BUILD 0.00, identical to true absence, and an
+ * index without domains gave BUILD for everything.
+ */
+describe("runGate never turns an unanswered component into BUILD (CM-3)", () => {
+  it("matches the model's echo case-insensitively (PoC 2a)", async () => {
+    const model = scriptedModel([
+      shortlist("UI  Kit", ["alpha/design-system"]),
+      rank([{ packageId: "alpha/ui-kit", score: 0.9, rationale: "Exactly this." }]),
+    ]);
+    const record = await runGate({ ...base, components: ["ui kit"], repos: [repoIndex("core")], model });
+    expect(record.components[0]!.verdict).toBe("REUSE");
+  });
+
+  it("reports an omitted component UNRESOLVED, not BUILD", async () => {
+    const model = scriptedModel([
+      shortlist("ui kit", ["alpha/design-system"]),
+      rank([{ packageId: "alpha/ui-kit", score: 0.9, rationale: "Exactly this." }]),
+    ]);
+    const record = await runGate({
+      ...base,
+      components: ["ui kit", "holography"],
+      repos: [repoIndex("core")],
+      model,
+    });
+    const holography = record.components.find((c) => c.name === "holography")!;
+    expect(holography.verdict).toBe("UNRESOLVED");
+    expect(holography.failedChecks).toEqual(["matcher-unanswered"]);
+  });
+
+  it("reports a component whose every domain was invented UNRESOLVED", async () => {
+    const model = scriptedModel([shortlist("ui kit", ["alpha/invented"])]);
+    const record = await runGate({ ...base, components: ["ui kit"], repos: [repoIndex("core")], model });
+    expect(record.components[0]!.verdict).toBe("UNRESOLVED");
+  });
+
+  it("refuses to gate against an index without domains (PoC 2c)", async () => {
+    const blind = { ...repoIndex("core"), domains: [] };
+    const model = scriptedModel([JSON.stringify({ selections: [] })]);
+    await expect(
+      runGate({ ...base, components: ["ui kit"], repos: [blind], model }),
+    ).rejects.toThrow(/no domains for: alpha/);
+    expect(model.calls).toBe(0);
+  });
+
+  it("binds the record to the specification text", async () => {
+    const model = scriptedModel([shortlist("ui kit", [])]);
+    const record = await runGate({ ...base, components: ["ui kit"], repos: [repoIndex("core")], model });
+    expect(record.specContentHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    const unbound = await runGate({
+      ...base,
+      specText: null,
+      components: ["ui kit"],
+      repos: [repoIndex("core")],
+      model: scriptedModel([shortlist("ui kit", [])]),
+    });
+    expect(unbound.specContentHash).toBeNull();
   });
 });
 

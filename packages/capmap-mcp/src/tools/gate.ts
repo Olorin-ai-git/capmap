@@ -35,6 +35,8 @@ export function gateTool(deps: ToolDeps): ToolDefinition[] {
         const drift = await computeDrift(manifest, deps.git, deps.config.root);
         return runGate({
           specPath: asString(args["specPath"]) ?? "mcp://gate",
+          // Not read, so the result is bound to no document and cannot satisfy the hook.
+          specText: null,
           components,
           // The caller supplies components directly, so the record must not
           // claim they were read from a document: the hook uses that to tell a

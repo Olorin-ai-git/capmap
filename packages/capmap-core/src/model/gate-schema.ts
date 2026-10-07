@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** Version of the gate record format. Independent of the index schema version. */
-export const GATE_SCHEMA_VERSION = 1;
+export const GATE_SCHEMA_VERSION = 2;
 
 export const VerdictSchema = z.enum([
   "REUSE",
@@ -52,6 +52,16 @@ export const GateRecordSchema = z.object({
   specPath: z.string().min(1),
   feature: z.string().min(1),
   componentsHash: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  /**
+   * Digest of the specification this record was gated from (see `specContentHash`), or
+   * null when no document was read (the MCP tool). The hook refuses a plan whose
+   * specification no longer matches it, so a record cannot outlive or be lent to
+   * another document.
+   */
+  specContentHash: z
+    .string()
+    .regex(/^sha256:[0-9a-f]{64}$/)
+    .nullable(),
   /**
    * Where the component list came from.
    *

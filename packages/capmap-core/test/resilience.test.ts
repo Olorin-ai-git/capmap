@@ -197,6 +197,7 @@ describe("the gate survives a refusing model", () => {
   it("blocks with UNRESOLVED when the model is down, never BUILD", async () => {
     const record = await runGate({
       specPath: "docs/specs/2026-08-02-x-design.md",
+      specText: null,
       componentsSource: "document" as const,
       components: ["billing", "auth"],
       repos: [repoIndex],

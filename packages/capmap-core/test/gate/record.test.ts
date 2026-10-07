@@ -18,6 +18,7 @@ const record: GateRecord = {
   specPath: "docs/specs/x.md",
   feature: "tenant-portal",
   componentsHash: `sha256:${"a".repeat(64)}`,
+  specContentHash: `sha256:${"b".repeat(64)}`,
   componentsSource: "document" as const,
   generatedAt: "2026-08-02T00:00:00.000Z",
   indexGeneratedAt: "2026-07-27T00:00:00.000Z",

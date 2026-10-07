@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readGateRecord, resolveGateDir } from "@capmap/core";
+import { readGateRecord, resolveGateDir, specContentHash } from "@capmap/core";
 import { runGateCommand } from "../../src/commands/gate.js";
 import { makeDeps, type TestDeps } from "../support/deps.js";
 import { writeFixtureIndex } from "../support/index-fixture.js";
@@ -151,5 +151,37 @@ describe("runGateCommand", () => {
     );
     expect(record?.componentsHash).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(record?.specPath).toBe(specPath);
+  });
+
+  it("binds the record to the specification's content", async () => {
+    const specPath = await specFile(SPEC);
+    const deps = await gateDeps([
+      SHORTLIST,
+      rank([{ packageId: "alpha/ui-kit", score: 0.9, rationale: "Exact." }]),
+    ]);
+    await runGateCommand(deps, { specPath, components: ["ui kit"], resolve: false });
+    const record = await readGateRecord(await resolveGateDir(specPath), "tenant-portal");
+    expect(record?.specContentHash).toBe(specContentHash(SPEC));
+  });
+
+  // Audit CM-2: `gate --resolve </dev/null` recorded "Operator accepted BUILD"
+  // for every UNRESOLVED component and exited 0. Vitest's stdin is not a TTY.
+  it("refuses --resolve without a terminal and writes no record", async () => {
+    const specPath = await specFile(SPEC);
+    const deps = await gateDeps([JSON.stringify({ selections: [] })]);
+    const code = await runGateCommand(deps, { specPath, components: [], resolve: true });
+    expect(code).toBe(1);
+    expect(deps.writer.lines.join("\n")).toMatch(/interactive terminal/);
+    expect(deps.model.calls).toBe(0);
+    expect(await readGateRecord(await resolveGateDir(specPath), "tenant-portal")).toBeNull();
+  });
+
+  it("reports an unanswered component UNRESOLVED and exits 2 (CM-3)", async () => {
+    const specPath = await specFile(SPEC);
+    const deps = await gateDeps([JSON.stringify({ selections: [] })]);
+    const code = await runGateCommand(deps, { specPath, components: [], resolve: false });
+    expect(code).toBe(2);
+    const record = await readGateRecord(await resolveGateDir(specPath), "tenant-portal");
+    expect(record?.components[0]?.failedChecks).toEqual(["matcher-unanswered"]);
   });
 });

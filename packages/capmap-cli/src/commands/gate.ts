@@ -12,7 +12,11 @@ import {
 import { StdinPrompt } from "../adapters/stdin-prompt.js";
 import type { CommandDeps } from "../composition.js";
 import { renderVerdictTable } from "../render/verdict-table.js";
-import { loadIndexContext, staleWarning } from "./index-context.js";
+import {
+  loadIndexContext,
+  staleWarning,
+  type IndexContext,
+} from "./index-context.js";
 
 const EXIT_OK = 0;
 const EXIT_ERROR = 1;
@@ -32,6 +36,18 @@ export interface GateOptions {
  * that guesses what it is gating produces a record whose hash means nothing,
  * and the operator would have no way to tell a guess from a reading.
  */
+async function readSpec(
+  deps: CommandDeps,
+  specAbs: string,
+): Promise<string | null> {
+  try {
+    return await readFile(specAbs, "utf8");
+  } catch {
+    deps.writer.line(`cannot read specification at ${specAbs}`);
+    return null;
+  }
+}
+
 async function componentsFor(
   deps: CommandDeps,
   opts: GateOptions,
@@ -39,13 +55,8 @@ async function componentsFor(
 ): Promise<string[] | null> {
   if (opts.components.length > 0) return opts.components;
 
-  let markdown: string;
-  try {
-    markdown = await readFile(specAbs, "utf8");
-  } catch {
-    deps.writer.line(`cannot read specification at ${specAbs}`);
-    return null;
-  }
+  const markdown = await readSpec(deps, specAbs);
+  if (markdown === null) return null;
 
   const listed = extractComponentsFromMarkdown(markdown);
   if (listed === null) {
@@ -64,6 +75,34 @@ async function componentsFor(
   return listed;
 }
 
+function gateOnce(
+  deps: CommandDeps,
+  specAbs: string,
+  specText: string,
+  components: string[],
+  componentsSource: GateRecord["componentsSource"],
+  context: IndexContext,
+): Promise<GateRecord> {
+  return runGate({
+    specPath: specAbs,
+    specText,
+    components,
+    componentsSource,
+    repos: context.repos,
+    manifest: context.manifest,
+    staleRepos: [...context.drifted].sort(),
+    rootAbs: deps.config.root,
+    thresholds: deps.config.scan.verdicts,
+    matching: deps.config.scan.matching,
+    selectMaxTokens: deps.config.scan.matching.selectMaxTokens,
+    rankMaxTokens: deps.config.scan.matching.rankMaxTokens,
+    model: deps.model,
+    clock: deps.clock,
+    logger: deps.logger,
+    maxRetries: deps.config.scan.enrichment.maxRetries,
+  });
+}
+
 /**
  * Score a draft specification against the index and record the verdicts.
  *
@@ -74,6 +113,16 @@ export async function runGateCommand(
   deps: CommandDeps,
   opts: GateOptions,
 ): Promise<number> {
+  // A pipe, a CI job or an agent is not an operator. Resolving off a terminal
+  // used to answer every prompt with "accept BUILD", clearing the gate unseen.
+  if (opts.resolve && process.stdin.isTTY !== true) {
+    deps.writer.line(
+      "--resolve needs an operator at an interactive terminal; stdin is not " +
+        "one. Run it yourself in a terminal, or fix what each UNRESOLVED row names.",
+    );
+    return EXIT_ERROR;
+  }
+
   const specAbs = isAbsolute(opts.specPath)
     ? opts.specPath
     : resolve(process.cwd(), opts.specPath);
@@ -92,23 +141,18 @@ export async function runGateCommand(
     return EXIT_ERROR;
   }
 
-  let record: GateRecord = await runGate({
-    specPath: specAbs,
-    components,
-    componentsSource,
-    repos: context.repos,
-    manifest: context.manifest,
-    staleRepos: [...context.drifted].sort(),
-    rootAbs: deps.config.root,
-    thresholds: deps.config.scan.verdicts,
-    matching: deps.config.scan.matching,
-    selectMaxTokens: deps.config.scan.matching.selectMaxTokens,
-    rankMaxTokens: deps.config.scan.matching.rankMaxTokens,
-    model: deps.model,
-    clock: deps.clock,
-    logger: deps.logger,
-    maxRetries: deps.config.scan.enrichment.maxRetries,
-  });
+  // Read after the index, so a missing index is reported first; the record is
+  // bound to this text, so the specification must exist even with --component.
+  const specText = await readSpec(deps, specAbs);
+  if (specText === null) return EXIT_ERROR;
+
+  let record: GateRecord;
+  try {
+    record = await gateOnce(deps, specAbs, specText, components, componentsSource, context);
+  } catch (error) {
+    deps.writer.line(String(error));
+    return EXIT_ERROR;
+  }
 
   const warning = staleWarning(context);
   if (warning !== null) deps.writer.line(warning);
