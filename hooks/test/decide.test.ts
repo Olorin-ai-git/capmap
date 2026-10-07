@@ -4,10 +4,11 @@ import { decide } from "../src/decide.js";
 const HASH = `sha256:${"a".repeat(64)}`;
 
 const record = {
-  schemaVersion: 1 as const,
+  schemaVersion: 2 as const,
   specPath: "specs/x.md",
   feature: "x",
   componentsHash: HASH,
+  specContentHash: HASH,
   componentsSource: "document" as const,
   generatedAt: "2026-08-02T00:00:00.000Z",
   indexGeneratedAt: "2026-07-27T00:00:00.000Z",
@@ -33,12 +34,20 @@ const base = {
   isSpec: true,
   isPlan: false,
   record,
+  recordProblem: null,
   currentComponentsHash: HASH,
   indexPresent: true,
   bypass: false,
 };
 
 describe("decide", () => {
+  it("blocks on a rejected record before anything else but the bypass (CM-1)", () => {
+    const d = decide({ ...base, record: null, recordProblem: "it gates no components" });
+    expect(d.allow).toBe(false);
+    expect(d.allow ? "" : d.reason).toMatch(/not valid: it gates no components/);
+    expect(decide({ ...base, recordProblem: "x", bypass: true }).allow).toBe(true);
+  });
+
   it("allows a path that is neither a specification nor a plan", () => {
     expect(decide({ ...base, isSpec: false,
   isPlan: false, record: null }).allow).toBe(

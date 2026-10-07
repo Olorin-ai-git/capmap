@@ -52,17 +52,24 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const configDir = join(repoRoot, "config");
 
 const root = mkdtempSync(join(tmpdir(), "capmap-latency-"));
-for (const dir of [".git", "plans", ".capmap"]) {
+for (const dir of [".git", "plans", "specs", ".capmap"]) {
   mkdirSync(join(root, dir), { recursive: true });
 }
 const target = join(root, "plans", "2026-08-02-tenant-portal.md");
 writeFileSync(target, "# Plan\n");
+// A record bound to its specification, so the timed path includes reading and
+// hashing the specification as every gated plan write does.
+const spec = join(root, "specs", "2026-08-02-tenant-portal-design.md");
+const specText = "# Spec\n\n## Components\n\n- billing\n";
+writeFileSync(spec, specText);
+const digest = (text) => `sha256:${createHash("sha256").update(text).digest("hex")}`;
 writeFileSync(
   join(root, ".capmap", "gate-tenant-portal.json"),
   JSON.stringify({
-    schemaVersion: 1, specPath: "s", feature: "tenant-portal",
-    componentsHash: `sha256:${createHash("sha256").update("[]").digest("hex")}`,
-    componentsSource: "flags", generatedAt: "a", indexGeneratedAt: "b",
+    schemaVersion: 2, specPath: spec, feature: "tenant-portal",
+    componentsHash: digest(JSON.stringify(["billing"])),
+    specContentHash: digest(specText.trimEnd()),
+    componentsSource: "document", generatedAt: "a", indexGeneratedAt: "b",
     staleRepos: [],
     components: [{ name: "billing", verdict: "REUSE", target: "t", score: 0.9,
       bestCandidate: null, verifiedSha: "s", failedChecks: [], competing: [],

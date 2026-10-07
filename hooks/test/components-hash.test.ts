@@ -3,11 +3,13 @@ import {
   componentsHash,
   extractComponents,
   normalise,
+  specContentHash as hookSpecContentHash,
 } from "../src/components-hash.js";
 import {
   extractComponentsFromMarkdown,
   hashComponents,
   normaliseComponents,
+  specContentHash,
 } from "../../packages/capmap-core/src/gate/components.js";
 
 /**
@@ -30,6 +32,13 @@ const DOCUMENTS = [
   "## Components\n- authentication\n### Backend\n- billing\n",
   "## Components\n\n### Frontend\n- ui kit\n\n### Backend\n- billing\n- auth\n\n## Next\n- ignored\n",
   "## Components\n- a\n#### Deeply nested\n- b\n# Appendix\n- ignored\n",
+  // CM-16: line endings, fences, nesting and numbered lists.
+  "# t\r\n## Components\r\n- billing\r\n- auth\r\n",
+  "intro\n```\n## Components\n- fake\n```\n## Components\n- real\n",
+  "## Components\n- billing\n~~~md\n- example\n~~~\n- auth\n",
+  "## Components\n- billing\n  - stripe webhooks\n  - note: uses x\n- auth\n",
+  "## Components\n1. billing\n2) auth\n+ email\n",
+  "# Spec\n\n## Reuse Verdicts\n| a | B |\n\n## Components\n- billing\n",
 ];
 
 const NAME_SETS = [
@@ -45,6 +54,10 @@ describe("hook and core agree on component extraction", () => {
     expect(extractComponents(markdown)).toEqual(
       extractComponentsFromMarkdown(markdown),
     );
+  });
+
+  it.each(DOCUMENTS)("hashes the specification identically: %j", (markdown) => {
+    expect(hookSpecContentHash(markdown)).toBe(specContentHash(markdown));
   });
 });
 

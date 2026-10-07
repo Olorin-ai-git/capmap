@@ -36,6 +36,8 @@ export interface DecideInput {
   /** Set when it matches the plan globs. Both may be true; neither means unguarded. */
   isPlan: boolean;
   record: GateRecord | null;
+  /** Why the record on disk was rejected (malformed, or bound to another document). */
+  recordProblem: string | null;
   /**
    * Hash of the components the document will declare after this call, or null
    * when it will declare none.
@@ -129,6 +131,11 @@ export function decide(input: DecideInput): Decision {
     };
   }
 
+  if (input.recordProblem !== null) {
+    const reason = `The reuse gate record for ${input.filePath} is not valid: ${input.recordProblem}.`;
+    const fix = `Records are written only by: ${GATE_COMMAND} <the specification>`;
+    return { allow: false, reason: [reason, fix, bypassHint()].join("\n") };
+  }
   if (input.record === null) return decideWithoutRecord(input);
 
   // A null hash means the document will declare no component list at all.

@@ -39,12 +39,18 @@ for (const d of [".git", "specs", "plans", ".capmap"]) {
 const spec = join(root, "specs", "2026-08-02-demo-design.md");
 const plan = join(root, "plans", "2026-08-02-demo.md");
 writeFileSync(spec, "# Spec\n\n## Components\n\n- billing\n");
+const FORGED = JSON.stringify({ components: [], staleRepos: [], componentsSource: "flags" });
 writeFileSync(join(root, "README.md"), "# r\n");
 
-const hash = `sha256:${createHash("sha256").update(JSON.stringify(["billing"])).digest("hex")}`;
+const digest = (text) => `sha256:${createHash("sha256").update(text).digest("hex")}`;
+const SPEC_TEXT = "# Spec\n\n## Components\n\n- billing\n";
+// What `capmap gate` writes: schema 2, bound to the specification's path and
+// content (CM-1), its component hash consistent with the components it lists.
 const record = (verdict) =>
   JSON.stringify({
-    schemaVersion: 1, specPath: "s", feature: "demo", componentsHash: hash,
+    schemaVersion: 2, specPath: spec, feature: "demo",
+    componentsHash: digest(JSON.stringify(["billing"])),
+    specContentHash: digest(SPEC_TEXT.trimEnd()),
     componentsSource: "document", generatedAt: "a", indexGeneratedAt: "b",
     staleRepos: [],
     components: [{ name: "billing", verdict, target: "t", score: 0.9,
@@ -52,12 +58,13 @@ const record = (verdict) =>
       rationale: "r" }],
   });
 const setRecord = (verdict) =>
-  writeFileSync(join(root, ".capmap", "gate-demo.json"), record(verdict));
-const clearRecord = () => {
-  try { writeFileSync(join(root, ".capmap", "gate-demo.json"), ""); } catch { /* absent is fine */ }
-};
+  writeFileSync(join(root, ".capmap", "gate-demo.json"),
+    verdict === "FORGED" ? FORGED : record(verdict));
+// Removed, not emptied: an empty record is now a malformed one, which blocks.
+const clearRecord = () => rmSync(join(root, ".capmap", "gate-demo.json"), { force: true });
 
 const write = (file, content) => ({ tool_name: "Write", tool_input: { file_path: file, content } });
+const bash = (command) => ({ tool_name: "Bash", cwd: root, tool_input: { command } });
 const edit = (file, old_string, new_string) => ({ tool_name: "Edit", tool_input: { file_path: file, old_string, new_string } });
 
 // The config directory is supplied here and always overrides the ambient value.
@@ -108,6 +115,11 @@ const cases = [
   ["resolved",   "edit that cannot be rebuilt",    "REUSE",      { tool_name: "Edit", tool_input: { file_path: spec, new_string: "- x" } }, 2],
   ["unresolved", "plan",                           "UNRESOLVED", write(plan, "# Plan\n"),                                           2],
   ["unresolved", "specification",                  "UNRESOLVED", write(spec, "# Spec\n\n## Components\n\n- billing\n"),             2],
+  // The audit's bypasses (CM-1, CM-4): a hand-written record, writing the
+  // record directly, and a plan written by a shell redirect.
+  ["forged",     "plan under a hand-written record","FORGED",    write(plan, "# Plan\n"),                                           2],
+  ["resolved",   "Write to the gate record",       "REUSE",      write(join(root, ".capmap", "gate-demo.json"), "{}"),              2],
+  ["no record",  "plan by Bash redirect",          null,         bash("cat > plans/2099-01-01-ungated.md <<'EOF'\n# Plan\nEOF"),   2],
 ];
 
 let failures = 0;

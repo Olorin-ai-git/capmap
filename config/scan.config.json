@@ -82,7 +82,12 @@
     ],
     "planGlobs": [
       "**/plans/**",
-      "**/docs/**/plan*.md"
+      "**/docs/**/plan*.md",
+      "**/docs/**/*-plan*.md",
+      "**/docs/**/*_plan*.md",
+      "**/docs/**/*implementation*.md",
+      "**/specs/**/plan*.md",
+      "**/specs/**/tasks*.md"
     ]
   },
   "index": {

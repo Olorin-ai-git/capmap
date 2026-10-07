@@ -8,10 +8,18 @@ import { componentsHash, extractComponents } from "./components-hash.js";
  */
 export const AMBIGUOUS_EDIT_HASH = "sha256:unreconstructable-edit";
 
-export interface PendingEdit {
-  content?: string;
+/** One replacement, as Edit sends it and as each entry of MultiEdit's `edits`. */
+export interface EditOperation {
   new_string?: string;
   old_string?: string;
+  /** Replace every occurrence; a repeated `old_string` is then unambiguous. */
+  replace_all?: boolean;
+}
+
+export interface PendingEdit extends EditOperation {
+  content?: string;
+  /** MultiEdit: applied in order, each to the result of the one before. */
+  edits?: EditOperation[];
 }
 
 async function readOrNull(path: string): Promise<string | null> {
@@ -20,6 +28,19 @@ async function readOrNull(path: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** The text after one replacement, or null when its effect cannot be known. */
+function applyEdit(text: string, edit: EditOperation): string | null {
+  const target = edit.old_string;
+  if (target === undefined || target === "" || edit.new_string === undefined) {
+    return null;
+  }
+  const first = text.indexOf(target);
+  if (first < 0) return null;
+  if (edit.replace_all === true) return text.split(target).join(edit.new_string);
+  if (text.indexOf(target, first + target.length) >= 0) return null;
+  return text.slice(0, first) + edit.new_string + text.slice(first + target.length);
 }
 
 /**
@@ -32,9 +53,10 @@ async function readOrNull(path: string): Promise<string | null> {
  * list matched the old gate record. The edit is therefore applied to the
  * on-disk document and the result hashed.
  *
- * Reconstruction fails closed. If `old_string` is absent or appears more than
- * once, the post-edit text is genuinely unknown, and a guard that cannot tell
- * must not assume nothing changed.
+ * Reconstruction fails closed. If `old_string` is absent, missing from the
+ * document, or appears more than once without `replace_all`, the post-edit text
+ * is genuinely unknown, and a guard that cannot tell must not assume nothing
+ * changed.
  */
 export async function pendingDocument(
   fileAbs: string,
@@ -45,29 +67,22 @@ export async function pendingDocument(
   }
 
   const current = await readOrNull(fileAbs);
-  if (input?.new_string === undefined) {
-    return { text: current, ambiguous: false };
-  }
-  if (current === null) {
-    return { text: input.new_string, ambiguous: false };
-  }
+  const edits = input?.edits ?? (input?.new_string === undefined ? [] : [input]);
+  if (edits.length === 0) return { text: current, ambiguous: false };
 
-  const target = input.old_string;
-  if (target === undefined || target === "") {
-    return { text: null, ambiguous: true };
+  // Creating a file: its first replacement is the whole initial content.
+  let text = current;
+  let pending = edits;
+  if (text === null) {
+    text = pending[0]?.new_string ?? "";
+    pending = pending.slice(1);
   }
-  const first = current.indexOf(target);
-  if (first < 0) return { text: null, ambiguous: true };
-  if (current.indexOf(target, first + target.length) >= 0) {
-    return { text: null, ambiguous: true };
+  for (const edit of pending) {
+    const next = applyEdit(text, edit);
+    if (next === null) return { text: null, ambiguous: true };
+    text = next;
   }
-  return {
-    text:
-      current.slice(0, first) +
-      input.new_string +
-      current.slice(first + target.length),
-    ambiguous: false,
-  };
+  return { text, ambiguous: false };
 }
 
 /**

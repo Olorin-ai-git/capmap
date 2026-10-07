@@ -3,7 +3,8 @@
 The hook is **not installed by default**, and installing it is deliberately a
 manual step. Once registered it intercepts every `Write` and `Edit` in every
 session, and it will refuse writes to specifications and plans that have no
-resolved gate record. That is the point of it, but it is not a change anyone
+resolved gate record — including writes made through `Bash`, `MultiEdit` and
+`NotebookEdit`, and any write to a `.capmap/` directory. That is the point of it, but it is not a change anyone
 should make on your behalf.
 
 Everything else — the CLI, the skills, the MCP server — works without it.
@@ -31,7 +32,7 @@ Add to `~/.claude/settings.json`:
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write|Edit",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
         "hooks": [
           {
             "type": "command",
@@ -45,8 +46,10 @@ Add to `~/.claude/settings.json`:
 ```
 
 `CAPMAP_CONFIG_DIR` is required. Without it the hook allows everything rather
-than guessing — a guard that cannot find its configuration must not start
-refusing writes on the strength of a default.
+than guessing — a guard that is not installed must not start refusing writes on
+the strength of a default. Once it is set, the hook fails closed: a missing or
+malformed configuration, unreadable input or any error of its own blocks the
+write (exit 2) and says why on stderr.
 
 ## What it does
 
@@ -59,12 +62,30 @@ refusing writes on the strength of a default.
 | New **plan**, no record | **block** — a plan is downstream of a gated specification |
 | Path matching **both** glob sets | both rules apply; the stricter one wins |
 | Existing file, no gate record            | block, pointing at `capmap gate <path>`                       |
+| Gate record malformed, or gates no components, or its hash disagrees with its components | block |
+| Specification write under a record gated from another file | block |
+| Plan write whose specification changed since the gate ran (a `## Reuse Verdicts` section excepted) | block, asking for a re-run |
+| Any write to a `.capmap/` directory | block — records are written only by `capmap gate` |
+| Configured, but the hook itself errors | block |
 | Component set changed since the gate ran | block, asking for a re-run                                    |
 | Any component `UNRESOLVED`               | block, printing the verdict table                             |
 | Repositories stale                       | allow, with a warning                                         |
 
-Globs default to `**/docs/superpowers/specs/**`, `**/specs/**`, `**/plans/**`
-and `**/docs/**/plan*.md`, and are configured in `config/scan.config.json`.
+Globs are configured in `config/scan.config.json` and match case-insensitively,
+including inside dot directories such as `.claude/worktrees`. Plans cover
+`**/plans/**`, `plan*`, `*-plan*`, `*_plan*` and `*implementation*` Markdown under
+`docs/`, and spec-kit's `plan.md` and `tasks.md` under `specs/`.
+
+### Shell commands
+
+For `Bash`, every path-like word of the command is treated as a possible write of
+unknown content, except in segments that start with a read-only command (`cat`,
+`grep`, `ls`, `git diff`/`log`/`status`/`add`, …) or with `capmap` and redirect
+nothing. A gated specification can therefore not be changed through the shell
+(use `Write`/`Edit`, which the hook can reconstruct), and an ungated plan cannot
+be created through it. This is lexical, not a shell parser: paths assembled at
+run time (`$DIR/plan.md`, a subshell's own `cd`, a script that writes a file)
+are not seen; a `cd` or `pushd` earlier in the command is followed.
 
 ## Bypassing
 
@@ -117,6 +138,6 @@ The measurement is its own step rather than a unit test. Inside vitest, with
 forty-one other files running in parallel, the same build measured 1.54 quiet
 and 2.45–3.12 under the runner.
 
-It runs on every `Write` and `Edit`, so that figure is the one that matters — a hook that reached for the index or the model would be
+It runs on every `Write`, `Edit` and `Bash` call, so that figure is the one that matters — a hook that reached for the index or the model would be
 unusable at this frequency, which is why the component hash is reimplemented in
 `hooks/src/` rather than imported from `@capmap/core`.

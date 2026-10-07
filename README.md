@@ -135,8 +135,12 @@ after a build.
   implementation bundled inside a control plane genuinely _is_ authentication —
   it is simply not extractable. Conflating the two hid every capability bundled
   inside a service.
-- **Fail closed.** Model unavailable → `UNRESOLVED`, never `BUILD`. An edit that
-  cannot be reconstructed → block. A plan with no record → block.
+- **Fail closed.** Model unavailable, or silent about a component →
+  `UNRESOLVED`, never `BUILD`; an index without domains is refused. An edit that
+  cannot be reconstructed → block. A plan with no record, a malformed record, or
+  a record not bound to the specification's current content → block. Writes to
+  `.capmap/` → block. Once configured, any error of the hook's own → block.
+  `gate --resolve` refuses to run without an operator at a terminal.
 - **Tier caps are unconditional.** Capabilities in `external` or `archived`
   repositories never exceed `REFERENCE`, whatever they score.
 - **A check that cannot fail is not a check.** Twenty-six of those were found

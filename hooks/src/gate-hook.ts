@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { access, readFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import picomatch from "picomatch";
-import { BYPASS_ENV_VAR, BYPASS_VALUE, decide } from "./decide.js";
+import { BYPASS_ENV_VAR, BYPASS_VALUE, decide, type Decision } from "./decide.js";
 import { deriveFeatureId } from "./feature-id.js";
-import { pendingHash } from "./pending-document.js";
+import { bindingProblem, isGateRecordPath, parseGateRecord } from "./gate-record.js";
+import { AMBIGUOUS_EDIT_HASH, pendingHash } from "./pending-document.js";
+import { loadConfig, targetsOf, type HookConfig, type HookPayload, type Target } from "./payload.js";
 
 const EXIT_ALLOW = 0;
 const EXIT_BLOCK = 2;
@@ -14,24 +16,8 @@ const SCAN_CONFIG_FILE = "scan.config.json";
 const MANIFEST_FILE = "index.json";
 const GIT_DIR = ".git";
 const LINE_TERMINATOR = "\n";
-
-interface HookPayload {
-  tool_name?: string;
-  tool_input?: {
-    file_path?: string;
-    /** Write supplies the whole new file. */
-    content?: string;
-    /** Edit supplies the replacement text for one region… */
-    new_string?: string;
-    /** …and the text it replaces, which is what makes reconstruction possible. */
-    old_string?: string;
-  };
-}
-
-interface HookConfig {
-  hook: { specGlobs: string[]; planGlobs: string[] };
-  index: { dir: string };
-}
+/** Case-insensitive, and into dot directories such as `.claude/worktrees`. */
+const GLOB_OPTIONS = { nocase: true, dot: true };
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -62,84 +48,105 @@ async function gateDirFor(fileAbs: string): Promise<string> {
   }
 }
 
-/**
- * Hash of the component list the document will declare AFTER the pending write.
- *
- * Reading the file from disk instead was a hole straight through the guard: the
- * on-disk copy is the pre-edit content, so changing a specification's component
- * list and saving it hashed the OLD components, matched the existing gate
- * record, and was allowed — defeated by precisely the edit the check exists to
- * catch. A Write carries its whole new content; an Edit carries only the
- * replacement region, which is enough to see a component list appear or change
- * within it.
- *
- * Falls back to the file on disk when the payload carries no content, and
- * returns null when no `## Components` section is visible at all. Null means
- * "cannot tell", which the decision treats as no evidence of change, so
- * prose-only edits still do not invalidate a gate.
- */
-async function main(): Promise<number> {
-  const configDir = process.env[CONFIG_DIR_ENV_VAR];
-  if (configDir === undefined || configDir === "") return EXIT_ALLOW;
+interface Context {
+  config: HookConfig;
+  configDir: string;
+  bypass: boolean;
+  isSpec: (path: string) => boolean;
+  isPlan: (path: string) => boolean;
+}
 
-  let payload: HookPayload;
-  try {
-    payload = JSON.parse(await readStdin()) as HookPayload;
-  } catch {
-    return EXIT_ALLOW;
+async function evaluate(target: Target, ctx: Context): Promise<Decision> {
+  const { fileAbs } = target;
+  if (isGateRecordPath(fileAbs)) {
+    return ctx.bypass
+      ? { allow: true, warning: `${BYPASS_ENV_VAR}=${BYPASS_VALUE}: gate record write allowed` }
+      : {
+          allow: false,
+          reason:
+            `Gate records are written only by "capmap gate": ${fileAbs}\n` +
+            `Bypass: ${BYPASS_ENV_VAR}=${BYPASS_VALUE}`,
+        };
   }
+  const isSpec = ctx.isSpec(fileAbs);
+  const isPlan = ctx.isPlan(fileAbs);
+  if (!isSpec && !isPlan) return { allow: true, warning: null };
 
-  const filePath = payload.tool_input?.file_path;
-  if (filePath === undefined || filePath === "") return EXIT_ALLOW;
-  const fileAbs = isAbsolute(filePath)
-    ? filePath
-    : resolve(process.cwd(), filePath);
-
-  let config: HookConfig;
-  try {
-    config = JSON.parse(
-      await readFile(resolve(configDir, SCAN_CONFIG_FILE), "utf8"),
-    ) as HookConfig;
-  } catch {
-    return EXIT_ALLOW;
-  }
-
-  // Both are evaluated; the sets may overlap and each carries its own rule.
-  const isSpec = picomatch(config.hook.specGlobs)(fileAbs);
-  const isPlan = picomatch(config.hook.planGlobs)(fileAbs);
-  const gateDir = await gateDirFor(fileAbs);
-  const recordPath = join(gateDir, `gate-${deriveFeatureId(fileAbs)}.json`);
-
+  const feature = deriveFeatureId(fileAbs);
+  const recordPath = join(await gateDirFor(fileAbs), `gate-${feature}.json`);
   let record = null;
+  let recordProblem = null;
   if (await exists(recordPath)) {
-    try {
-      record = JSON.parse(await readFile(recordPath, "utf8")) as never;
-    } catch {
-      record = null;
-    }
+    const parsed = parseGateRecord(await readFile(recordPath, "utf8"), feature);
+    record = parsed.record;
+    recordProblem =
+      parsed.problem ?? (await bindingProblem(parsed.record, fileAbs, isPlan));
   }
 
-  const decision = decide({
+  return decide({
     filePath: fileAbs,
     fileExists: await exists(fileAbs),
     isSpec,
     isPlan,
     record,
-    currentComponentsHash: await pendingHash(fileAbs, payload.tool_input),
+    recordProblem,
+    currentComponentsHash:
+      target.input === null
+        ? isSpec ? AMBIGUOUS_EDIT_HASH : null
+        : await pendingHash(fileAbs, target.input),
     indexPresent: await exists(
-      resolve(configDir, "..", config.index.dir, MANIFEST_FILE),
+      resolve(ctx.configDir, "..", ctx.config.index.dir, MANIFEST_FILE),
     ),
-    bypass: process.env[BYPASS_ENV_VAR] === BYPASS_VALUE,
+    bypass: ctx.bypass,
   });
+}
 
-  if (!decision.allow) {
-    process.stderr.write(`${decision.reason}${LINE_TERMINATOR}`);
-    return EXIT_BLOCK;
+async function run(configDir: string, bypass: boolean): Promise<number> {
+  const payload = JSON.parse(await readStdin()) as HookPayload;
+  const config = loadConfig(
+    await readFile(resolve(configDir, SCAN_CONFIG_FILE), "utf8"),
+  );
+  const ctx: Context = {
+    config,
+    configDir,
+    bypass,
+    isSpec: picomatch(config.hook.specGlobs, GLOB_OPTIONS),
+    isPlan: picomatch(config.hook.planGlobs, GLOB_OPTIONS),
+  };
+  const warnings = new Set<string>();
+  for (const target of targetsOf(payload, payload.cwd ?? process.cwd())) {
+    const decision = await evaluate(target, ctx);
+    if (!decision.allow) {
+      process.stderr.write(`${decision.reason}${LINE_TERMINATOR}`);
+      return EXIT_BLOCK;
+    }
+    if (decision.warning !== null) warnings.add(decision.warning);
   }
-  if (decision.warning !== null) {
-    process.stderr.write(`${decision.warning}${LINE_TERMINATOR}`);
-  }
+  for (const warning of warnings) process.stderr.write(`${warning}${LINE_TERMINATOR}`);
   return EXIT_ALLOW;
+}
+
+/**
+ * Unconfigured, the hook allows: a guard with no configuration must not start
+ * refusing writes on the strength of a default. Configured, any error of its
+ * own blocks. Exit 1 is non-blocking to Claude Code, so an uncaught exception
+ * used to let the write through — a malformed record or config opened the gate.
+ */
+async function main(): Promise<number> {
+  const configDir = process.env[CONFIG_DIR_ENV_VAR];
+  if (configDir === undefined || configDir === "") return EXIT_ALLOW;
+  const bypass = process.env[BYPASS_ENV_VAR] === BYPASS_VALUE;
+  try {
+    return await run(configDir, bypass);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(
+      `capmap gate hook could not decide (${message}); ` +
+        (bypass ? `allowed under ${BYPASS_ENV_VAR}=${BYPASS_VALUE}` : "blocking") +
+        LINE_TERMINATOR,
+    );
+    return bypass ? EXIT_ALLOW : EXIT_BLOCK;
+  }
 }
 
 process.exitCode = await main();

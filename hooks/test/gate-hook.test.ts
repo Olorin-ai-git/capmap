@@ -1,9 +1,10 @@
 import { describe, it, expect, afterAll, beforeAll } from "vitest";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile, access } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, access, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { specContentHash } from "../src/components-hash.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const HOOK = join(here, "..", "dist", "gate-hook.js");
@@ -52,11 +53,14 @@ function invoke(filePath: string, env: NodeJS.ProcessEnv): Promise<Invocation> {
 
 const HASH_OF_BILLING_ONLY = "sha256:f8ecc289bb90f63f1ceebbec31147ecc8b97d98014f0f8a39d258ec6d816e2f3";
 
+const SPEC_FILE = join("specs", "2026-08-02-tenant-portal-design.md");
+const SPEC_TEXT = "# Spec\n\n## Components\n\n- billing\n";
+
 const RESOLVED_RECORD = {
-  schemaVersion: 1,
-  specPath: "specs/x.md",
+  schemaVersion: 2,
   feature: "tenant-portal",
-  componentsHash: `sha256:${"a".repeat(64)}`,
+  componentsHash: HASH_OF_BILLING_ONLY,
+  componentsSource: "document",
   generatedAt: "2026-08-02T00:00:00.000Z",
   indexGeneratedAt: "2026-07-27T00:00:00.000Z",
   staleRepos: [] as string[],
@@ -85,6 +89,8 @@ async function scenario(): Promise<{ root: string; env: NodeJS.ProcessEnv }> {
     "# Plan\n",
   );
   await writeFile(join(root, "README.md"), "# readme\n");
+  await mkdir(join(root, "specs"), { recursive: true });
+  await writeFile(join(root, SPEC_FILE), SPEC_TEXT);
 
   const configRoot = await mkdtemp(join(tmpdir(), "capmap-hookcfg-"));
   scratch.push(configRoot);
@@ -108,11 +114,24 @@ async function scenario(): Promise<{ root: string; env: NodeJS.ProcessEnv }> {
   return { root, env: { CAPMAP_CONFIG_DIR: join(configRoot, "config") } };
 }
 
-async function writeRecord(root: string, record: unknown): Promise<void> {
+/**
+ * Write a record as `capmap gate` would: bound to the scenario's specification
+ * by path and by the content currently on disk. Fields in `record` win.
+ */
+async function writeRecord(root: string, record: object): Promise<void> {
+  const specPath = join(root, SPEC_FILE);
   await mkdir(join(root, ".capmap"), { recursive: true });
   await writeFile(
     join(root, ".capmap", "gate-tenant-portal.json"),
-    JSON.stringify(record, null, 2),
+    JSON.stringify(
+      {
+        specPath,
+        specContentHash: specContentHash(await readFile(specPath, "utf8")),
+        ...record,
+      },
+      null,
+      2,
+    ),
   );
 }
 

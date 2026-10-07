@@ -44,26 +44,36 @@ last-indexed state. Offer `capmap refresh --stale` before trusting a close call.
 
 ### 2. Drive every unresolved component to a decision
 
-`UNRESOLVED` means a capability matched but failed verification against live source — the
-path moved, the manifest name changed, the entry point disappeared, or an export named in
-the index no longer exists. It is never a scoring problem, so it cannot be argued away.
+`UNRESOLVED` has two causes, and the failed check on each row says which:
 
-Run:
+- `matcher-unavailable` or `matcher-unanswered` — the component was never compared
+  against the estate (the model was unreachable, or answered without it). Re-run
+  `capmap gate` once the model is reachable. This is never evidence that nothing
+  exists, and it cannot be cleared by accepting `BUILD`.
+- any other check — a capability matched but failed verification against live
+  source: the path moved, the manifest name changed, the entry point disappeared,
+  or an export named in the index no longer exists.
+
+Resolution is the user's decision, made at their own terminal. Ask the user to run:
 
 ```
 capmap gate <path to the specification> --resolve
 ```
 
-Walk each unresolved component with the user and choose one of the three offered options:
+Do not run it yourself: it refuses to run without an interactive terminal, and
+piping answers into it is the bypass it exists to prevent. For each unresolved
+component the user chooses one of:
 
-1. Accept `BUILD` — the candidate is genuinely gone or wrong.
+1. Accept `BUILD` — the candidate is genuinely gone or wrong (no effect on a
+   component the matcher never compared).
 2. Re-verify the candidate — correct after the source moved or was refreshed.
 3. Pick a different capability by id — when the survey found a better target.
 
 Re-verification re-runs the same checks and re-applies the same tier caps, so a
-resolution can never promote a capability past its cap. Never hand-edit the record to
-clear an `UNRESOLVED` entry: the hook reads the record, and editing it removes the
-enforcement instead of satisfying it. Re-run the command until the exit code is `0`.
+resolution can never promote a capability past its cap. Never write, edit, copy or
+delete anything under `.capmap/`: the hook blocks it, and a record not written by
+`capmap gate` for the specification's current content does not satisfy the hook.
+Re-run the command until the exit code is `0`.
 
 ### 3. Write the verdicts into the specification
 
