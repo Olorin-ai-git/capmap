@@ -25,7 +25,8 @@ describe("bashTargets", () => {
 
   it("treats substitutions, subshells and shell scripts as commands", () => {
     expect(targets("cat $(cp a .capmap/g.json)")).toEqual(["/r/.capmap/g.json", "/r/.capmap/g.json/a"]);
-    expect(targets("ls `tee p.md`")).toEqual(["/r/p.md"]);
+    // Backquotes nest differently from $( ): refused, not read.
+    expect(() => targets("ls `tee p.md`")).toThrow(/backquotes/);
     expect(targets(`cat "x$(touch q)y" <(touch s) >(touch t)`)).toEqual(["/r/q", "/r/s", "/r/t"]);
     expect(targets("(cd /tmp; touch u)")).toEqual(["/r/u", "/tmp/u"]);
     expect(targets(`bash -c "echo > v"`)).toEqual(["/r/v"]);
@@ -33,7 +34,8 @@ describe("bashTargets", () => {
 
   it("skips heredoc bodies, except substitutions in an expanding one", () => {
     expect(targets("cat > n.md <<'EOF'\nplans/a.md\nEOF\necho ok")).toEqual(["/r/n.md"]);
-    expect(targets("cat <<-EOF\n\tplans/a.md $(touch w) `touch y`\n\tEOF")).toEqual(["/r/w", "/r/y"]);
+    expect(targets("cat <<-EOF\n\tplans/a.md $(touch w)\n\tEOF")).toEqual(["/r/w"]);
+    expect(() => targets("cat <<-EOF\n\t`touch y`\n\tEOF")).toThrow(/backquotes/);
     expect(targets("cat <<EOF\nunterminated")).toEqual([]);
   });
 
@@ -90,7 +92,8 @@ describe("bashTargets, audit round 5", () => {
 
   it("expands braces outside quotes, and refuses an expansion past the word limit", () => {
     expect(targets("touch p{lans,x}/a .c{a..b}")).toEqual(["/r/.ca", "/r/.cb", "/r/plans/a", "/r/px/a"]);
-    expect(targets("cp a '{b,c}' && cp a \\{b,c} && cp a ${x}")).toEqual(["/r/${x}", "/r/${x}/a", "/r/{b,c}", "/r/{b,c}/a"]);
+    expect(targets("cp a '{b,c}' && cp a \\{b,c} && cp a '${x}'")).toEqual(["/r/${x}", "/r/${x}/a", "/r/{b,c}", "/r/{b,c}/a"]);
+    expect(() => targets("cp a ${x}")).toThrow(/computed at run time/);
     expect(targets("cp a {b,c}")).toEqual(["/r/c", "/r/c/a", "/r/c/b"]);
     expect(targets("echo > {01..03}.md")).toEqual(["/r/01.md", "/r/02.md", "/r/03.md"]);
     expect(() => bashTargets("echo {1..5000}", CTX)).toThrow();
@@ -106,7 +109,7 @@ describe("bashTargets, audit round 5", () => {
     expect(targets("env -u cat cp a b")).toContain("/r/b");
     expect(targets("./cat a")).toEqual(["/r/a"]);
     expect(targets("npx cat a")).toEqual(["/r/a"]);
-    expect(targets("cat() { :; }; cat a")).toContain("/r/a");
+    expect(() => targets("cat() { :; }; cat a")).toThrow(/function definition/);
     expect(targets("PATH=x cat a")).toContain("/r/a");
     expect(targets("GIT_PAGER='cp a b' git log")).toContain("/r/b");
     expect(targets("eval 'cd s'; echo > a")).toEqual(["/r/a", "/r/s/a"]);
@@ -129,19 +132,21 @@ describe("runsOperatorCommand", () => {
 });
 
 describe("bashTargets, audit round 6", () => {
-  it("trusts no name when a case pattern or zsh syntax may end a substitution early", () => {
-    expect(targets("echo $(case x in x) cp a .capmap/g;; esac)")).toContain("/r/.capmap/g");
-    expect(targets("ls *(e:'cp a .capmap/g':)")).toContain("/r/.capmap/g");
-    expect(targets("echo ${(e):-'$(cp a .capmap/g)'}")).toContain("/r/.capmap/g");
+  it("refuses a case pattern or zsh syntax that may end a substitution early", () => {
+    expect(() => targets("echo $(case x in x) cp a .capmap/g;; esac)")).toThrow(/"case" statement/);
+    expect(() => targets("ls *(e:'cp a .capmap/g':)")).toThrow(/glob qualifier/);
+    expect(() => targets("echo ${(e):-'$(cp a .capmap/g)'}")).toThrow(/expansion with an operator/);
   });
 
   it("reads what a shell or an interpreter takes on its input as a script", () => {
-    expect(targets("echo 'cp a b' | sh")).toContain("/r/b");
-    expect(targets("cat <<'E' | bash\ncp a b\nE")).toContain("/r/b");
+    // Piped into a shell, the script is another program's output: refused.
+    expect(() => targets("echo 'cp a b' | sh")).toThrow(/piped into it/);
+    expect(() => targets("cat <<'E' | bash\ncp a b\nE")).toThrow(/piped into it/);
     expect(targets("bash <<< 'cp a b'")).toContain("/r/b");
     expect(targets("sh <<'E'\ncp a b\nE")).toContain("/r/b");
     expect(targets("node - <<'E'\nfs.writeFileSync('p/x.md')\nE")).toContain("/r/p/x.md");
-    expect(targets("find plans | xargs rm")).toContain("/r/plans");
+    expect(() => targets("find plans | xargs rm")).toThrow(/piped into it/);
+    expect(() => targets("find plans -name '*.md' | xargs grep -n Spec")).not.toThrow();
   });
 
   it("leaves data a reader takes, and prose, alone", () => {

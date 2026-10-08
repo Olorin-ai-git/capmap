@@ -155,14 +155,29 @@ same quoting (`<<E\;F` ends at the line `E;F`), command and process
 substitutions, subshells and `sh -c`/`eval` scripts are commands of their own,
 and heredoc bodies are data — except to a program that runs its input.
 
+The hook fails closed on what it cannot read exactly, rather than guessing:
+
+- Syntax the lexer may read differently from the shell is refused outright: a
+  `case`, `select` or `function` statement, a function definition `f()`,
+  backquotes, arithmetic (`$(( ))`, `(( ))`, `$[ ]`), a `${…}` expansion with
+  an operator (`${x:-…}`, `${x/a/b}`, zsh's `${(e)…}`), zsh's glob qualifiers
+  and `=( )`, and zsh's clobbering redirects (`>!`, `>>|`).
+- A value the shell computes at run time — `$X`, `${X}`, `$(…)`, process
+  substitution, `~+`/`~-`/`~user`, zsh's `=cmd` — is refused where it decides
+  what is written or run: as a redirect target, as the program, or as an
+  argument of anything but a pure reader (`echo`, `cat`, `grep`, `ls`, `wc`,
+  `test`, `[[`, `jq`, …). An environment builtin (`export`, `declare`, `local`,
+  …) may assign a computed value to a literal name, and a commit message or a
+  PR body may be computed (`git commit -m "$(cat <<'EOF' …)"`, `gh pr create
+  --body "$(…)"`). Write such a path out literally, or run the computation as a
+  command of its own.
+
 Redirect targets are always writes. A program's name is trusted to say what it
 writes only when it surely names the program: a bare name, reached through
 wrappers (`env`, `exec`, `command`, `sudo`, …) that carry no options, with no
 assignment in front of it, not run through `npx`/`pnpm`, and in a command that
 defines no function, alias or `PATH`/`GIT_*`-style variable, and uses no syntax
-whose nesting the lexer does not model (a `case` statement, whose patterns end
-in a lone `)`; zsh's glob qualifiers `*(e:…:)`, parameter flags `${(e)…}` and
-`=( )`; a function `f()`). A trusted name writes nothing through its arguments
+that the lexer refuses (above). A trusted name writes nothing through its arguments
 (`cat`, `grep`, `ls`, `mkdir`, `sed` without `-i`/`w`/`e`, `find` without
 `-exec`/`-delete`, `git` read-only subcommands without `-c`, `--upload-pack`,
 `--receive-pack`, `--exec` or `--output`, `capmap` itself unless an argument
@@ -209,7 +224,8 @@ changes the environment may not run capmap.
 This is lexical, not a shell. The lexer models bash and the zsh constructs that
 carry commands; Claude Code on macOS runs commands in zsh, and any zsh syntax
 outside that model is a gap of the same kind. Not seen: paths assembled at run
-time (`$DIR/plan.md`, `printf '%s' … | sh`, encoded text), and anything a file the
+time inside code the shell hands to another program (`node -e`, `python -c`,
+encoded text piped to `sh`), and anything a file the
 agent wrote earlier does when it runs — a script, a function, `PATH` entry or
 exported variable (`ANTHROPIC_BASE_URL`, `CAPMAP_ROOT`) in a shell profile, git configuration, hooks or objects (`git checkout`, `git stash
 pop`), an archive (`tar x`), a package in `node_modules`, or a rebuilt capmap.

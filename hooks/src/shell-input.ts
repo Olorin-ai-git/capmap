@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { SUBSTITUTION } from "./shell-lex.js";
 import { BLANKS, CODE, positional, readsOnly } from "./shell-programs.js";
 
@@ -47,4 +48,17 @@ function xargsReadsOnly(args: string[]): boolean {
 export function inputRole(program: string, args: string[]): "script" | "code" | "paths" | "data" {
   if (program === XARGS) return xargsReadsOnly(args) ? "data" : "paths";
   return inputUse(program, args);
+}
+
+/**
+ * Whether piped text becomes code or arguments: a shell running it as a script,
+ * or `xargs` handing it to a program that may write. What another program
+ * printed is known only at run time, so the walk refuses it rather than read it.
+ */
+export function runsInput(prog: { program: string | undefined; args: string[]; trusted: boolean }): boolean {
+  const words = [prog.program ?? "", ...prog.args];
+  const at = prog.trusted ? 0 : words.findIndex((word) => SHELLS.has(basename(word)) || basename(word) === XARGS);
+  if (at === -1) return false;
+  const role = inputRole(basename(words[at] as string), words.slice(at + 1));
+  return role === "script" || role === "paths";
 }

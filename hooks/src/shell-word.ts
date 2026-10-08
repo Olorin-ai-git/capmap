@@ -9,6 +9,8 @@ import { ansiC } from "./ansi-c.js";
 export interface Cursor {
   readonly source: string;
   i: number;
+  /** The first construct read whose expansion the lexer does not model, if any. */
+  odd?: string;
 }
 
 export interface Word {
@@ -16,12 +18,20 @@ export interface Word {
   shape: string;
   /** Any part was quoted or escaped; a heredoc delimiter then suppresses expansion. */
   quoted: boolean;
+  /** Part of it is computed at run time: a parameter, a substitution, `~+`, `~user` or zsh's `=cmd`. */
+  runtime: boolean;
 }
 
 const METACHARACTER = /[\s;|&<>()]/;
 /** Escaped in front of the dollar, backquote, double quote, backslash and newline only. */
 const DOUBLE_QUOTE_ESCAPABLE = /[$`"\\\n]/;
 const SHAPE_SPECIAL = /[\\{},.$]/g;
+/** After a `$`, anything but a blank may start an expansion (zsh adds `$=x`, `$~x`, `$^x`, `$+x`). */
+const PARAMETER_START = /\S/;
+/** A leading `~` the shell expands to something other than the home directory. */
+const OTHER_TILDE = /^~[^/\s;|&<>()]/;
+/** `${NAME}` alone; any operator inside the braces (`${x:-…}`, `${x/a/…}`, zsh flags) is not modelled. */
+const PLAIN_PARAMETER = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}/;
 /** Stands for a substitution's output, which is known only at run time. */
 export const SUBSTITUTION = "$()";
 
@@ -39,7 +49,7 @@ export function readWord(
   nested: ((to: string) => void) | null,
 ): Word | null {
   const { source } = cur;
-  const word: Word = { text: "", shape: "", quoted: false };
+  const word: Word = { text: "", shape: "", quoted: false, runtime: false };
   let seen = false;
   const take = (text: string, quoted: boolean): void => {
     seen = true;
@@ -47,9 +57,20 @@ export function readWord(
     word.shape += quoted ? text.replace(SHAPE_SPECIAL, "\\$&") : text;
     word.quoted ||= quoted;
   };
+  const odd = (what: string): void => {
+    cur.odd ??= what;
+  };
+  /** Expansions whose nesting or reading the lexer does not model. */
+  const unmodelled = (c: string, d: string | undefined): void => {
+    if (c === "`") odd("backquotes");
+    else if (c === "$" && d === "(" && source[cur.i + 2] === "(") odd("arithmetic expansion");
+    else if (c === "$" && d === "[") odd("arithmetic expansion");
+    else if (c === "$" && d === "{" && !PLAIN_PARAMETER.test(source.slice(cur.i))) odd("a ${…} expansion with an operator");
+  };
   const substitution = (to: string, opener: number): void => {
     if (nested === null) throw new Error("a heredoc delimiter holds a substitution");
     cur.i += opener;
+    word.runtime = true;
     take(SUBSTITUTION, true);
     nested(to);
   };
@@ -58,6 +79,8 @@ export function readWord(
     const c = source[cur.i] as string;
     const d = source[cur.i + 1];
     if (METACHARACTER.test(c) || c === end) break;
+    if (nested !== null) unmodelled(c, d);
+    if (!seen && (OTHER_TILDE.test(source.slice(cur.i, cur.i + 2)) || c === "=")) word.runtime = true;
     if (c === "\\") {
       if (d !== undefined && d !== "\n") take(d, true);
       cur.i += 2;
@@ -76,6 +99,8 @@ export function readWord(
       while (cur.i < source.length && source[cur.i] !== '"') {
         const q = source[cur.i] as string;
         const r = source[cur.i + 1] ?? "";
+        if (nested !== null) unmodelled(q, r);
+        if (q === "$" && PARAMETER_START.test(r)) word.runtime = true;
         if (q === "\\" && DOUBLE_QUOTE_ESCAPABLE.test(r)) {
           if (r !== "\n") take(r, true);
           cur.i += 2;
@@ -91,6 +116,7 @@ export function readWord(
     } else if (c === "$" && (d === "(" || (d === "{" && nested === null))) substitution(")", 2);
     else if (c === "`") substitution("`", 1);
     else {
+      if (c === "$" && d !== undefined && PARAMETER_START.test(d)) word.runtime = true;
       take(c, false);
       cur.i += 1;
     }

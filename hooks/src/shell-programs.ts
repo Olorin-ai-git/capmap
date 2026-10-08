@@ -25,7 +25,7 @@ const CONFIG_ASSIGNMENT = "CAPMAP_CONFIG_DIR=";
 const READ_ONLY = new Set([
   "cat", "head", "tail", "grep", "egrep", "fgrep", "rg", "ls", "wc", "stat",
   "diff", "cmp", "shasum", "sha256sum", "md5", "echo", "printf", "pwd",
-  "which", "test", "[", "true", "false", "sleep", "mkdir", "rmdir", "find", "sed",
+  "which", "test", "[", "true", "false", "sleep", "mkdir", "rmdir", "find", "sed", "for",
 ]);
 const GIT_READ_ONLY = new Set([
   "add", "blame", "branch", "cat-file", "commit", "describe", "diff", "fetch",

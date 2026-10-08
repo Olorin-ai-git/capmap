@@ -1,10 +1,11 @@
 import { basename, join, relative, resolve, sep } from "node:path";
 import { lex, type Command } from "./shell-lex.js";
+import { refuseRuntimeValues } from "./shell-runtime.js";
 import {
   ALL_ARGUMENT_WRITERS, DESTINATION_WRITERS, PIECE_BREAK, destinations, pieces, places, positional, programOf,
   readsOnly, type Program,
 } from "./shell-programs.js";
-import { inputRole, mayBeScript, SHELLS } from "./shell-input.js";
+import { inputRole, mayBeScript, runsInput, SHELLS } from "./shell-input.js";
 import { absolutes, changeDir, chdirs, unknown, type Dirs } from "./shell-dirs.js";
 import { expandGlob, patchPaths, readRegular, tree } from "./shell-fs.js";
 import {
@@ -17,19 +18,13 @@ export type { ShellContext } from "./shell-traits.js";
 /**
  * Paths a Bash command may write, so the gate also covers shell writes.
  *
- * The command is lexed the way the shell reads it (shell-lex.ts). Redirect
- * targets are always writes. Arguments are writes unless a trusted name says
- * the program writes nothing through them, or only its destination (see
- * shell-programs.ts); an unknown program's every argument piece is a write,
- * and every argument that may be a script is read as one too — a guess, so
- * only the paths in it count. A moved or copied directory carries its files,
- * a glob names what it matches, a patch the files it changes, and what a shell
- * reads on its input — piped, a heredoc or a here-string — is a script.
- * Directories follow every `cd` (shell-dirs.ts).
- *
- * ponytail: lexical, not a shell. Paths built at run time (`$DIR/x.md`, a
- * script file, git configuration or hooks that write) are not seen; an
- * OS-level write guard is the upgrade if that matters.
+ * Lexed as the shell reads it (shell-lex.ts); redirect targets are writes;
+ * arguments are writes unless a trusted name says otherwise (shell-programs.ts),
+ * and arguments that may be scripts are read as scripts. Directories follow
+ * every `cd` (shell-dirs.ts). It fails closed on syntax the lexer does not model
+ * and on values computed at run time where they decide a write (shell-runtime.ts).
+ * ponytail: lexical, not a shell. Code it runs (a script file, `node -e`, git
+ * hooks) is not read; an OS-level write guard is the upgrade if that matters.
  */
 
 const NULL_DEVICE = "/dev/null";
@@ -165,7 +160,9 @@ class Walker {
   /** Records what the script may write, returning the directories it may end in. */
   walk(script: string, start: Dirs, inherited: boolean, guessing: boolean): Dirs {
     const { commands, unmodelled } = lex(script, this.ctx.maxWords);
-    const taint = inherited || unmodelled || taintsNames(script, commands);
+    // Fails closed: a script the lexer cannot read as the shell would is refused, not guessed at.
+    if (unmodelled !== null && !guessing) throw new Error(`the command uses ${unmodelled}, which the hook cannot read exactly`);
+    const taint = inherited || unmodelled !== null || taintsNames(script, commands);
     const cdpath = this.ctx.cdpath || commands.some((cmd) => cmd.words.some((w) => CDPATH_ASSIGNMENT.test(w)));
     if (!guessing) this.environment(commands);
     let dirs = start;
@@ -175,10 +172,12 @@ class Walker {
       const prog = programOf(cmd.words, taint);
       const name = prog.program ?? "";
       if (!guessing) this.check(cmd, prog);
+      if (!guessing) refuseRuntimeValues(cmd, prog);
       // An untrusted name may be a function of that name: its arguments are writes as well.
       if (!prog.trusted || !(CHANGE_DIR.has(name) || name === EVAL)) {
         this.argumentWrites(prog, { script, cmd, dirs, taint, guessing, fed: upstream.length > 0 });
       }
+      if (upstream.length > 0 && !guessing && runsInput(prog)) throw new Error(`${name} runs what is piped into it, known only at run time`);
       this.consume(prog, [...upstream, ...cmd.input], dirs, taint, guessing);
       upstream = cmd.piped ? [...upstream, ...cmd.words, ...cmd.input] : [];
       if (CHANGE_DIR.has(name)) dirs = changeDir(prog, dirs, { home: this.ctx.home, cdpath });

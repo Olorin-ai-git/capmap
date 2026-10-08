@@ -1,20 +1,15 @@
 /**
  * A lexer for the part of shell syntax that decides what a command writes.
  *
- * Words are read with the shell's quoting (shell-word.ts) and brace-expanded
- * (`p{lans,x}` is `plans` and `px`); command and process substitutions,
- * backquotes and subshells become commands of their own, and stand in their
- * word as `$()`; redirect targets are kept apart from arguments; heredoc bodies
- * are data, except the substitutions an unquoted delimiter lets the shell
- * expand. The delimiter is read with the same quoting, so `<<E\;F` ends at the
- * line `E;F`, not at `E` — reading it differently hid every line in between.
- *
- * Heredoc bodies, here-strings and pipes are kept: a shell reads its input as a
- * script. Syntax whose `)` the shell may read differently (`case` patterns, zsh
- * glob qualifiers `*(e:…:)` and flags `${(e)…}`, `=( )`, `f()`) is `unmodelled`.
- *
- * ponytail: lexical, not a shell. Expansion of `$VAR` and globs is not
- * performed; aliases and functions are the caller's concern.
+ * Words are read with the shell's quoting (shell-word.ts) and brace-expanded;
+ * substitutions, backquotes and subshells become commands of their own and
+ * stand in their word as `$()`; redirect targets are kept apart; heredoc
+ * delimiters are read with the same quoting, and bodies, here-strings and pipes
+ * are kept, since a shell reads its input as a script. Words computed at run
+ * time are marked, and syntax the lexer may read differently from the shell
+ * (`case`, functions, backquotes, arithmetic, `${…}` operators, zsh's glob
+ * qualifiers and clobbering redirects) is named in `unmodelled`; the caller
+ * refuses both where they matter.
  */
 
 import { expandBraces } from "./brace-expand.js";
@@ -32,33 +27,38 @@ export interface Command {
   input: string[];
   /** Its output is piped into the next command. */
   piped: boolean;
+  /** Its words (and redirect targets) whose value is computed at run time. */
+  runtime: Set<string>;
 }
 
 export interface Lexed {
   commands: Command[];
-  /** The command uses syntax whose nesting this lexer does not model. */
-  unmodelled: boolean;
+  /** Syntax whose reading this lexer does not model, named, or null. */
+  unmodelled: string | null;
 }
 
 const BLANK = /[ \t]/;
 const DIGITS = /^\d+$/;
 const LEADING_TABS = /^\t+/;
 /** Reserved words whose syntax (a `case` pattern's lone `)`) the lexer does not model. */
-const UNMODELLED_WORDS = new Set(["case", "esac", "select", "coproc", "foreach", "repeat"]);
-const command = (): Command => ({ words: [], writes: [], reads: [], input: [], piped: false });
+const UNMODELLED_WORDS = new Set(["case", "esac", "select", "coproc", "foreach", "repeat", "function"]);
+/** Words after which the next word is again a command's first. */
+const COMMAND_PREFIXES = new Set(["if", "then", "else", "elif", "while", "until", "do", "!", "{", "time"]);
+const command = (): Command => ({ words: [], writes: [], reads: [], input: [], piped: false, runtime: new Set() });
 
 /** Splits a command line into commands of dequoted, brace-expanded words; throws past `maxWords`. */
 export function lex(source: string, maxWords: number): Lexed {
   const out: Command[] = [];
   const cur: Cursor = { source, i: 0 };
   let total = 0;
-  let unmodelled = false;
+  const odd = (what: string): string => (cur.odd ??= what);
 
   /** Scans one nesting level until `end`, appending its commands to `out`. */
   function level(end: string | null): void {
     let cmd = command();
     let word: string | null = null;
     let shape = "";
+    let computed = false;
     let next: "word" | "write" | "read" | "input" | "skip" = "word";
     const heredocs: { delimiter: string; expands: boolean; stripTabs: boolean; owner: Command }[] = [];
 
@@ -67,14 +67,16 @@ export function lex(source: string, maxWords: number): Lexed {
       const words = shape.includes("{") ? expandBraces(shape, maxWords) : [word];
       total += words.length;
       if (total > maxWords) throw new Error(`the command has over ${String(maxWords)} words`);
+      for (const w of computed ? words : []) cmd.runtime.add(w);
+      if (next === "word" && cmd.words.every((w) => COMMAND_PREFIXES.has(w)) && UNMODELLED_WORDS.has(words[0] ?? "")) odd(`a "${words[0] ?? ""}" statement`);
       if (next === "write") cmd.writes.push(...words);
       else if (next === "read") cmd.reads.push(...words);
       else if (next === "input") cmd.input.push(...words);
       else if (next === "word") cmd.words.push(...words);
-      unmodelled ||= next === "word" && words.some((w) => UNMODELLED_WORDS.has(w));
       next = "word";
       word = null;
       shape = "";
+      computed = false;
     };
     const endCommand = (): void => {
       endWord();
@@ -89,10 +91,12 @@ export function lex(source: string, maxWords: number): Lexed {
       endWord();
       next = kind;
       cur.i += width;
+      if (kind === "write" && (source[cur.i] === "!" || source[cur.i] === "|")) odd("a clobbering redirect");
     };
     const nested = (to: string): void => {
       word = (word ?? "") + SUBSTITUTION;
       shape += `\\$()`;
+      computed = true;
       level(to);
     };
     const bodies = (): void => {
@@ -121,7 +125,7 @@ export function lex(source: string, maxWords: number): Lexed {
         const c = source[cur.i];
         if (c === "\\") cur.i += 2;
         else if (c === "$" && source[cur.i + 1] === "(") { cur.i += 2; level(")"); }
-        else if (c === "`") { cur.i += 1; level("`"); }
+        else if (c === "`") { odd("backquotes"); cur.i += 1; level("`"); }
         else cur.i += 1;
       }
       cur.i = resume;
@@ -137,7 +141,8 @@ export function lex(source: string, maxWords: number): Lexed {
         nested(")");
       } else if (c === "(" || c === ")") {
         // A word running into `(` is zsh's glob qualifier or `=( )`, or a function.
-        unmodelled ||= c === "(" && word !== null;
+        if (c === "(" && word !== null) odd("a function definition or glob qualifier");
+        if (c === "(" && d === "(" && word === null) odd("an arithmetic command");
         endCommand();
         cur.i += 1;
         if (c === "(") level(")");
@@ -169,12 +174,7 @@ export function lex(source: string, maxWords: number): Lexed {
         cur.i += after === "-" ? 3 : 2;
         while (BLANK.test(source[cur.i] ?? "")) cur.i += 1;
         const delimiter = readWord(cur, null, null);
-        heredocs.push({
-          delimiter: delimiter?.text ?? "",
-          expands: delimiter?.quoted !== true,
-          stripTabs: after === "-",
-          owner: cmd,
-        });
+        heredocs.push({ delimiter: delimiter?.text ?? "", expands: delimiter?.quoted !== true, stripTabs: after === "-", owner: cmd });
       } else if (c === "<" && d === ">") {
         redirect("write", 2);
       } else if (c === "<" && d === "&") {
@@ -187,6 +187,7 @@ export function lex(source: string, maxWords: number): Lexed {
         if (read !== null) {
           word = (word ?? "") + read.text;
           shape += read.shape;
+          computed ||= read.runtime;
         }
       }
     }
@@ -194,5 +195,5 @@ export function lex(source: string, maxWords: number): Lexed {
   }
 
   while (cur.i < source.length) level(null);
-  return { commands: out, unmodelled };
+  return { commands: out, unmodelled: cur.odd ?? null };
 }
