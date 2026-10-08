@@ -13,7 +13,7 @@
  */
 
 import { expandBraces } from "./brace-expand.js";
-import { readWord, SUBSTITUTION, type Cursor } from "./shell-word.js";
+import { readWord, statementProblem, SUBSTITUTION, type Cursor } from "./shell-word.js";
 
 export { SUBSTITUTION };
 
@@ -40,10 +40,6 @@ export interface Lexed {
 const BLANK = /[ \t]/;
 const DIGITS = /^\d+$/;
 const LEADING_TABS = /^\t+/;
-/** Reserved words whose syntax (a `case` pattern's lone `)`) the lexer does not model. */
-const UNMODELLED_WORDS = new Set(["case", "esac", "select", "coproc", "foreach", "repeat", "function"]);
-/** Words after which the next word is again a command's first. */
-const COMMAND_PREFIXES = new Set(["if", "then", "else", "elif", "while", "until", "do", "!", "{", "time"]);
 const command = (): Command => ({ words: [], writes: [], reads: [], input: [], piped: false, runtime: new Set() });
 
 /** Splits a command line into commands of dequoted, brace-expanded words; throws past `maxWords`. */
@@ -68,7 +64,8 @@ export function lex(source: string, maxWords: number): Lexed {
       total += words.length;
       if (total > maxWords) throw new Error(`the command has over ${String(maxWords)} words`);
       for (const w of computed ? words : []) cmd.runtime.add(w);
-      if (next === "word" && cmd.words.every((w) => COMMAND_PREFIXES.has(w)) && UNMODELLED_WORDS.has(words[0] ?? "")) odd(`a "${words[0] ?? ""}" statement`);
+      const problem = next === "word" ? statementProblem(words[0] ?? "", cmd.words) : null;
+      if (problem !== null) odd(problem);
       if (next === "write") cmd.writes.push(...words);
       else if (next === "read") cmd.reads.push(...words);
       else if (next === "input") cmd.input.push(...words);

@@ -123,3 +123,19 @@ export function readWord(
   }
   return seen ? word : null;
 }
+
+/** Reserved words whose syntax (a `case` pattern's lone `)`, zsh's `always`) the lexer does not model. */
+const UNMODELLED_WORDS = new Set(["case", "esac", "select", "coproc", "foreach", "repeat", "function", "always"]);
+/** Words after which the next word is again a command's first. */
+const COMMAND_PREFIXES = new Set(["if", "then", "else", "elif", "while", "until", "do", "!", "{", "}", "time"]);
+
+/**
+ * Why a word read as part of a command is syntax the lexer does not model, or
+ * null: an unmodelled reserved word where a command starts, or a bare `}` after
+ * arguments, which zsh reads as closing a brace group and bash as an argument.
+ */
+export function statementProblem(word: string, before: string[]): string | null {
+  const first = before.every((w) => COMMAND_PREFIXES.has(w));
+  if (first && UNMODELLED_WORDS.has(word)) return `a "${word}" statement`;
+  return !first && word === "}" ? "a brace that zsh reads as closing a group" : null;
+}

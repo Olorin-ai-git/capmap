@@ -89,6 +89,8 @@ describe("fail closed: syntax the lexer does not model", () => {
         "echo ${x/a/$(cp stage/foo-plan.md plans/foo-plan.md)}",
         "printf '%s' 'cp stage/foo-plan.md pl' 'ans/foo-plan.md' | sh",
         "printf 'cp stage/foo-plan.md pl%sans/foo-plan.md' '' | bash -s",
+        "{ echo a } always { cp stage/foo-plan.md plans/foo-plan.md }",
+        "{ echo a }; cp stage/foo-plan.md plans/x.md }",
       ],
       BLOCK,
     );
