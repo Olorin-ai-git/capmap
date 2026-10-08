@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { PackageEntry } from "../model/index-schema.js";
-import { UNTRUSTED_NOTICE, fence, readExcerpt } from "./untrusted.js";
+import { UNTRUSTED_NOTICE, fence, readExcerpt, sanitiseModelText } from "./untrusted.js";
 
 export const PACKAGE_SYSTEM_PROMPT = [
   "You summarise a software package for a reuse catalogue.",
@@ -23,16 +23,28 @@ export async function buildPackagePrompt(
       ? ""
       : await readExcerpt(repoRootAbs, join(dirAbs, entry.entry), maxExcerptChars);
 
+  // Names, paths, exports and dependency names are arbitrary strings from the
+  // scanned repository, so they are data like the README: each flattened to one
+  // line, the block capped, and fenced.
+  const manifest = (
+    [
+      ["name", entry.name],
+      ["path", entry.path],
+      ["exports", entry.exports.join(", ")],
+      ["external dependencies", entry.deps.external.join(", ")],
+      ["internal dependencies", entry.deps.internal.join(", ")],
+      ["consumers", entry.consumers.join(", ")],
+    ] as const
+  )
+    .map(([label, value]) => `${label}: ${sanitiseModelText(value, maxExcerptChars)}`)
+    .join("\n")
+    .slice(0, maxExcerptChars);
+
   return [
-    `name: ${entry.name}`,
     `kind: ${entry.kind}`,
-    `path: ${entry.path}`,
-    `exports: ${entry.exports.join(", ")}`,
-    `external dependencies: ${entry.deps.external.join(", ")}`,
-    `internal dependencies: ${entry.deps.internal.join(", ")}`,
-    `consumers: ${entry.consumers.join(", ")}`,
     `deploy target: ${entry.deployTarget?.kind ?? "none"}`,
     `vocabulary: ${vocabulary.join(", ")}`,
+    fence("MANIFEST", manifest),
     readme === "" ? "" : fence("README", readme),
     source === "" ? "" : fence("ENTRY FILE", source),
   ]
