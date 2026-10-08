@@ -9,6 +9,7 @@ function ask(overrides: {
   available?: boolean;
   headSha?: string | null;
   previousSha?: string | null;
+  unenrichedUnits?: boolean;
 }): boolean {
   return shouldEnrich({
     opts: { ...RUN, ...overrides.opts },
@@ -16,6 +17,7 @@ function ask(overrides: {
     headSha: overrides.headSha === undefined ? "sha-1" : overrides.headSha,
     previousSha:
       overrides.previousSha === undefined ? "sha-1" : overrides.previousSha,
+    unenrichedUnits: overrides.unenrichedUnits ?? false,
   });
 }
 
@@ -27,6 +29,16 @@ function ask(overrides: {
 describe("shouldEnrich", () => {
   it("skips a repository whose HEAD has not moved", () => {
     expect(ask({ headSha: "sha-1", previousSha: "sha-1" })).toBe(false);
+  });
+
+  /**
+   * SP-3 audit round 4: units that appear without a HEAD change (Python
+   * sub-packages after upgrading capmap) stayed unenriched, and outside every
+   * domain, until someone knew to pass --force.
+   */
+  it("enriches an unchanged repository that holds units never enriched", () => {
+    expect(ask({ unenrichedUnits: true })).toBe(true);
+    expect(ask({ unenrichedUnits: true, opts: { enrich: false } })).toBe(false);
   });
 
   it("enriches a repository whose HEAD has moved", () => {

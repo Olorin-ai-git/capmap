@@ -83,11 +83,24 @@ export async function runScan(
     if (opts.explain)
       writer.line(renderExplain(repo.id, result.breakdowns, config.scan));
 
+    // Skipping enrichment must not discard it. Without carrying it forward, a
+    // --no-enrich rescan wiped every summary and the whole domain layer for
+    // the repositories it touched, and the matcher reaches packages only
+    // through domains.
+    const carried = await carryEnrichment(
+      store,
+      repo.id,
+      deps.config.scan.enrichment.maxSummaryChars,
+      result.packages,
+    );
     const enriched: EnrichedRepo | null = shouldEnrich({
       opts,
       available: result.available,
       headSha: result.headSha,
       previousSha: previousSha.get(repo.id) ?? null,
+      unenrichedUnits: carried.packages.some(
+        (entry) => entry.summary === null && !entry.enrichmentFailed,
+      ),
     })
       ? await enrichRepo(deps, {
           repo,
@@ -96,26 +109,12 @@ export async function runScan(
         })
       : null;
 
-    // Skipping enrichment must not discard it. Without carrying it forward, a
-    // --no-enrich rescan wiped every summary and the whole domain layer for
-    // the repositories it touched, and the matcher reaches packages only
-    // through domains.
-    const carried =
-      enriched === null
-        ? await carryEnrichment(
-            store,
-            repo.id,
-            deps.config.scan.enrichment.maxSummaryChars,
-            result.packages,
-          )
-        : null;
-
     const index: RepoIndex = {
       schemaVersion: INDEX_SCHEMA_VERSION,
       repo: repo.id,
       tier: repo.tier,
-      domains: enriched?.domains ?? carried?.domains ?? [],
-      packages: enriched?.packages ?? carried?.packages ?? result.packages,
+      domains: enriched?.domains ?? carried.domains,
+      packages: enriched?.packages ?? carried.packages,
       minor: result.minor,
     };
     if (!opts.dryRun) await store.writeRepo(index);

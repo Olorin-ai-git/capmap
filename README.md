@@ -116,6 +116,11 @@ pnpm exec capmap show web/checkout
 pnpm exec capmap verify                         # does the index still match live source?
 ```
 
+A rescan pays for enrichment only where it can change something: a repository
+whose HEAD moved, or one holding units no enrichment has described yet (new
+sub-packages, or an earlier `--no-enrich` scan). `capmap scan --force`
+re-enriches the rest too.
+
 Then install the skills into Claude Code, and — when you actually want the
 enforcement — the hook. The skills are symlinked, not copied, so they track this
 checkout:
