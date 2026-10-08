@@ -18,6 +18,10 @@ const PATHS = [
   "/abs/2026-08-02-x.MD",
   "docs/2026-08-02-redesign.md",
   "docs/2026-08-02-plan.md",
+  "specs/001-tenant-portal/spec.md",
+  "specs/001-tenant-portal/plan.md",
+  "specs/001-tenant-portal/tasks.md",
+  "spec.md",
   "",
 ];
 
@@ -29,6 +33,12 @@ describe("deriveFeatureId", () => {
     ["specs/tenant-portal.md"],
   ])("derives %s to the shared feature id", (path) => {
     expect(deriveFeatureId(path)).toBe("tenant-portal");
+  });
+
+  it("names spec-kit's spec.md, plan.md and tasks.md after their directory", () => {
+    for (const file of ["spec.md", "plan.md", "tasks.md"]) {
+      expect(deriveFeatureId(`specs/001-tenant-portal/${file}`)).toBe("001-tenant-portal");
+    }
   });
 
   it("maps a spec and its plan to the same feature id", () => {

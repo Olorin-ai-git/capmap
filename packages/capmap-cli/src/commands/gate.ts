@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import {
   extractComponentsFromMarkdown,
@@ -31,15 +31,12 @@ export interface GateOptions {
 }
 
 /**
- * Components come from the document's `## Components` section; `--component`
- * flags are accepted only for a document that has none. Model extraction is deliberately absent — a gate
+ * Components come from the document's `## Components` section; `--component` flags are
+ * accepted only for a document that has none. Model extraction is deliberately absent — a gate
  * that guesses what it is gating produces a record whose hash means nothing,
  * and the operator would have no way to tell a guess from a reading.
  */
-async function readSpec(
-  deps: CommandDeps,
-  specAbs: string,
-): Promise<string | null> {
+async function readSpec(deps: CommandDeps, specAbs: string): Promise<string | null> {
   try {
     return await readFile(specAbs, "utf8");
   } catch {
@@ -129,9 +126,11 @@ export async function runGateCommand(
     return EXIT_ERROR;
   }
 
-  const specAbs = isAbsolute(opts.specPath)
-    ? opts.specPath
-    : resolve(process.cwd(), opts.specPath);
+  const literal = isAbsolute(opts.specPath) ? opts.specPath : resolve(process.cwd(), opts.specPath);
+  // Named and bound by where it resolves, as the hook names it: a record for
+  // `specs/foo.md -> ../shared/bar.md` is gate-bar.json beside bar.md, or the
+  // hook would look for a record the CLI never wrote and refuse every later edit.
+  const specAbs = await realpath(literal).catch(() => literal);
 
   let context;
   try {
@@ -179,8 +178,12 @@ export async function runGateCommand(
     deps.writer.line(renderVerdictTable(record));
   }
 
-  const gateDir = await resolveGateDir(specAbs);
-  const written = await writeGateRecord(gateDir, record);
+  // Refused when another specification of the same feature id holds the record.
+  const written = await writeGateRecord(await resolveGateDir(specAbs), record).catch((error: unknown) => error);
+  if (typeof written !== "string") {
+    deps.writer.line(written instanceof Error ? written.message : String(written));
+    return EXIT_ERROR;
+  }
   deps.writer.line(`gate record written to ${written}`);
 
   const unresolved = unresolvedComponents(record);

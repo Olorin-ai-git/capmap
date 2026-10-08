@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   GATE_SCHEMA_VERSION,
@@ -51,6 +51,38 @@ function isMissingFile(error: unknown): boolean {
   );
 }
 
+/** The canonical path, or null when nothing exists there. */
+async function existingPath(path: string): Promise<string | null> {
+  try {
+    return await realpath(path);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Refuse to replace the record of another specification that derives the same feature id.
+ * Records are named by feature, so gating a decoy such as `decoy/specs/foo.md` used to
+ * overwrite the record of `specs/foo.md` — an UNRESOLVED verdict replaced by the decoy's
+ * BUILD. A record whose specification no longer exists (it moved) may be replaced.
+ */
+async function assertNotGatedElsewhere(path: string, record: GateRecord): Promise<void> {
+  let previous: unknown;
+  try {
+    previous = (JSON.parse(await readFile(path, "utf8")) as { specPath?: unknown }).specPath;
+  } catch {
+    return;
+  }
+  if (typeof previous !== "string") return;
+  const [before, now] = await Promise.all([existingPath(previous), existingPath(record.specPath)]);
+  if (before !== null && before !== now) {
+    throw new Error(
+      `feature "${record.feature}" is already gated for ${previous}; rename ${record.specPath} ` +
+        `so its feature id differs, or gate ${previous}`,
+    );
+  }
+}
+
 /**
  * Persist a gate record, returning its path. The write lands on a sibling staging file and
  * is renamed into place, so a reader never observes a half-written record.
@@ -61,6 +93,7 @@ export async function writeGateRecord(
 ): Promise<string> {
   await mkdir(dirAbs, { recursive: true });
   const path = recordPath(dirAbs, record.feature);
+  await assertNotGatedElsewhere(path, record);
   const staging = `${path}${WRITE_SUFFIX}`;
   await writeFile(
     staging,

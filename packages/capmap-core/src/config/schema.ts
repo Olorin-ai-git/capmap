@@ -95,6 +95,29 @@ export const ScanConfigSchema = z.object({
      * single Write and bypass the gate completely.
      */
     planGlobs: z.array(z.string().min(1)).min(1),
+    /**
+     * Neither specifications nor plans, whatever the other globs say. Claude
+     * Code's plan mode writes `~/.claude/plans/<slug>.md`, which no gate could
+     * ever clear.
+     */
+    exemptGlobs: z.array(z.string().min(1)),
+    /**
+     * The hook blocks once it has not decided within this time. Claude Code lets a
+     * write through when its own hook timeout expires, so a hook that hangs — on a
+     * FIFO, say — must answer before that.
+     */
+    deadlineMs: z.number().int().positive(),
+    /**
+     * A Bash command expanding to more words than this (brace expansion multiplies
+     * them) is refused rather than lexed: `{1..9999999}` would exhaust memory and
+     * crash the hook, and a crash is not a block.
+     */
+    maxShellWords: z.number().int().positive(),
+    /**
+     * Paths a glob, a moved or copied directory, or a patch in a Bash command may
+     * name before the command is refused rather than walked.
+     */
+    maxShellPaths: z.number().int().positive(),
   }),
   index: z.object({ dir: z.string().min(1) }),
   expectedCounts: z.object({

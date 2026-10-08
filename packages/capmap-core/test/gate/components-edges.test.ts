@@ -62,10 +62,19 @@ describe("specContentHash (CM-1 binding)", () => {
     const withVerdicts = `${spec}\n## Reuse Verdicts\n| billing | REUSE |\n`;
     expect(specContentHash(withVerdicts)).toBe(specContentHash(`${spec}\n`));
     const verdictsMidway =
-      "# Spec\n\n## Reuse Verdicts\n| a | B |\n\n## Components\n- billing\n";
+      "# Spec\n\n## Reuse Verdicts\n| billing | BUILD |\n\n## Components\n- billing\n";
     expect(specContentHash(verdictsMidway)).toBe(
       specContentHash("# Spec\n\n## Components\n- billing\n"),
     );
+  });
+
+  // Audit round 4 (Low): a pipe-led line is not a verdict by its first character.
+  it("counts table rows that are not verdicts of declared components", () => {
+    for (const row of ["| NEW SCOPE: also build a payments ledger |", "| payments ledger | BUILD |", "| a | B |"]) {
+      expect(specContentHash(`${spec}\n## Reuse Verdicts\n${row}\n`), row).not.toBe(specContentHash(`${spec}\n`));
+    }
+    const header = `${spec}\n## Reuse Verdicts\n| Component | Verdict |\n|---|:-:|\n| Billing | REUSE |\n`;
+    expect(specContentHash(header)).toBe(specContentHash(`${spec}\n`));
   });
 
   // Audit round 2 (Low): only the copied table is exempt, so scope cannot be

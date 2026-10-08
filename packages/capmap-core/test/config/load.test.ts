@@ -52,6 +52,10 @@ async function fixtureConfigDir(overrides: Record<string, unknown> = {}) {
     hook: {
       specGlobs: ["**/specs/**"],
       planGlobs: ["**/plans/**"],
+      exemptGlobs: ["**/.claude/plans/*.md"],
+      deadlineMs: 5000,
+      maxShellWords: 4096,
+      maxShellPaths: 10000,
     },
     index: { dir: "index" },
     expectedCounts: {

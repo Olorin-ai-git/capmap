@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { readGateRecord, resolveGateDir, specContentHash } from "@capmap/core";
 import { runGateCommand } from "../../src/commands/gate.js";
 import { makeDeps, type TestDeps } from "../support/deps.js";
@@ -163,7 +163,7 @@ describe("runGateCommand", () => {
       "tenant-portal",
     );
     expect(record?.componentsHash).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(record?.specPath).toBe(specPath);
+    expect(record?.specPath).toBe(await realpath(specPath));
   });
 
   it("binds the record to the specification's content", async () => {
@@ -175,6 +175,25 @@ describe("runGateCommand", () => {
     await runGateCommand(deps, { specPath, components: [], resolve: false });
     const record = await readGateRecord(await resolveGateDir(specPath), "tenant-portal");
     expect(record?.specContentHash).toBe(specContentHash(SPEC));
+  });
+
+  // Audit round 5: the hook names a record by the specification's resolved path, so
+  // the CLI must too, or every later write to a linked specification is refused.
+  it("names and binds the record by the specification's resolved path", async () => {
+    const realSpec = await specFile(SPEC);
+    const root = dirname(dirname(realSpec));
+    const shared = join(root, "shared", "bar.md");
+    await mkdir(dirname(shared), { recursive: true });
+    await writeFile(shared, SPEC);
+    const linked = join(root, "specs", "foo.md");
+    await symlink(join("..", "shared", "bar.md"), linked);
+    const deps = await gateDeps([
+      SHORTLIST,
+      rank([{ packageId: "alpha/ui-kit", score: 0.9, rationale: "Exact." }]),
+    ]);
+    await runGateCommand(deps, { specPath: linked, components: [], resolve: false });
+    const record = await readGateRecord(await resolveGateDir(await realpath(shared)), "bar");
+    expect(record?.specPath).toBe(await realpath(shared));
   });
 
   // Audit CM-2: `gate --resolve </dev/null` recorded "Operator accepted BUILD"
@@ -212,5 +231,36 @@ describe("runGateCommand", () => {
     expect(code).toBe(2);
     const record = await readGateRecord(await resolveGateDir(specPath), "tenant-portal");
     expect(record?.components[0]?.failedChecks).toEqual(["matcher-unanswered"]);
+  });
+});
+
+// Audit round 4 (High): gating a decoy whose name derives the same feature id
+// overwrote the real specification's UNRESOLVED record with a BUILD one.
+describe("runGateCommand: one record per feature", () => {
+  it("refuses to replace the record of another specification with the same feature id", async () => {
+    const specPath = await specFile(SPEC);
+    const first = await gateDeps([SHORTLIST, rank([{ packageId: "alpha/ui-kit", score: 0.9, rationale: "Exact." }])]);
+    expect(await runGateCommand(first, { specPath, components: [], resolve: false })).toBe(0);
+    const root = join(specPath, "..", "..");
+    const decoy = join(root, "decoy", "specs", "2026-08-02-tenant-portal-design.md");
+    await mkdir(join(decoy, ".."), { recursive: true });
+    await writeFile(decoy, "# Decoy\n\n## Components\n\n- banner\n");
+    const second = await gateDeps([SHORTLIST]);
+    expect(await runGateCommand(second, { specPath: decoy, components: [], resolve: false })).toBe(1);
+    expect(second.writer.lines.join("\n")).toMatch(/already gated/);
+    const record = await readGateRecord(await resolveGateDir(specPath), "tenant-portal");
+    expect(record?.specPath).toBe(await realpath(specPath));
+  });
+
+  it("replaces the record of a specification that no longer exists", async () => {
+    const specPath = await specFile(SPEC);
+    const first = await gateDeps([SHORTLIST, rank([{ packageId: "alpha/ui-kit", score: 0.9, rationale: "Exact." }])]);
+    await runGateCommand(first, { specPath, components: [], resolve: false });
+    const moved = join(specPath, "..", "moved", "2026-08-02-tenant-portal-design.md");
+    await mkdir(join(moved, ".."), { recursive: true });
+    await writeFile(moved, SPEC);
+    await (await import("node:fs/promises")).rm(specPath);
+    const second = await gateDeps([SHORTLIST, rank([{ packageId: "alpha/ui-kit", score: 0.9, rationale: "Exact." }])]);
+    expect(await runGateCommand(second, { specPath: moved, components: [], resolve: false })).toBe(0);
   });
 });

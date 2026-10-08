@@ -88,7 +88,13 @@
       "**/docs/**/*implementation*.md",
       "**/specs/**/plan*.md",
       "**/specs/**/tasks*.md"
-    ]
+    ],
+    "exemptGlobs": [
+      "**/.claude/plans/*.md"
+    ],
+    "deadlineMs": 5000,
+    "maxShellWords": 4096,
+    "maxShellPaths": 10000
   },
   "index": {
     "dir": "index"
