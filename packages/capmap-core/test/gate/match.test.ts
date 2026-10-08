@@ -12,9 +12,9 @@ import {
 const CFG = {
   maxCandidates: 5,
   model: "m",
-  effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
+  maxRationaleChars: 400,
 };
 const SELECT_TOKENS = 2048;
 const RANK_TOKENS = 512;
@@ -90,7 +90,7 @@ describe("selectCandidateDomains", () => {
     expect(model.calls).toBe(1);
   });
 
-  it("passes the model, effort and token budget through to the request", async () => {
+  it("passes the model and token budget through to the request", async () => {
     const seen: unknown[] = [];
     const model = {
       calls: 0,
@@ -109,7 +109,6 @@ describe("selectCandidateDomains", () => {
     });
     expect(seen[0]).toMatchObject({
       model: "m",
-      effort: "high",
       maxTokens: SELECT_TOKENS,
     });
   });

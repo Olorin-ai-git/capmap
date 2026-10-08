@@ -11,9 +11,12 @@
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { DOCUMENTATION_ONLY, codeDigest } from "./code-digest.mjs";
 
 const TRANSCRIPT = "docs/operations/verification-transcript.txt";
 const TESTED_COMMIT = /^\s*Code commit under test:\s*([0-9a-f]{40})\s*$/m;
+/** Digest of the tested code, which a squash or rebase merge does not change. */
+const TESTED_DIGEST = /^\s*Code tree digest:\s*([0-9a-f]{64})\s*$/m;
 /**
  * Every commit the transcript names anywhere — the header, and the line each
  * platform section prints from inside its own clone.
@@ -25,16 +28,6 @@ const TESTED_COMMIT = /^\s*Code commit under test:\s*([0-9a-f]{40})\s*$/m;
  * to be two clean clones of ONE commit.
  */
 const ANY_COMMIT = /^\s*(?:Code commit under test|commit):\s*([0-9a-f]{40})\s*$/gm;
-/**
- * Paths that may change without invalidating a transcript.
- *
- * `docs/` and top-level prose. Deliberately not "any .md anywhere":
- * a skill's `SKILL.md` is behaviour, it has a test asserting its frontmatter, and
- * a transcript generated before an edit to one no longer describes what runs.
- * The first version of this rule was `^docs\/` alone, which classified the
- * repository's own README as code.
- */
-const DOCUMENTATION_ONLY = /^(docs\/|[^/]+\.md$)/;
 
 const transcript = readFileSync(TRANSCRIPT, "utf8");
 const stated = TESTED_COMMIT.exec(transcript);
@@ -70,16 +63,32 @@ try {
   process.exit(1);
 }
 
+let present = true;
 try {
   git("cat-file", "-e", `${tested}^{commit}`);
 } catch {
-  process.stderr.write(`${TRANSCRIPT} names ${tested}, which is not a commit in this repository\n`);
-  process.exit(1);
+  present = false;
 }
 
-const changed = head === tested
-  ? []
-  : git("diff", "--name-only", `${tested}..${head}`).split("\n").filter((line) => line !== "");
+// After a squash or rebase merge the tested commit is not in this history, but
+// the code it held is: the digest of HEAD's code must equal the digest the
+// transcript recorded, or the code has moved.
+let changed;
+if (present) {
+  changed = head === tested
+    ? []
+    : git("diff", "--name-only", `${tested}..${head}`).split("\n").filter((line) => line !== "");
+} else {
+  const digest = TESTED_DIGEST.exec(transcript);
+  if (digest === null) {
+    process.stderr.write(
+      `${TRANSCRIPT} names ${tested}, which is not a commit in this repository, ` +
+      `and records no code tree digest to compare instead\n`,
+    );
+    process.exit(1);
+  }
+  changed = codeDigest("HEAD") === digest[1] ? [] : ["(code differs from the tested tree digest)"];
+}
 // An uncommitted edit to a source file makes the transcript just as stale as a
 // committed one, and is the easier of the two to overlook.
 const dirty = gitRaw("status", "--porcelain")

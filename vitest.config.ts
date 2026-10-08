@@ -28,7 +28,7 @@ const ENTRY_POINTS = [
 
 export default defineConfig({
   test: {
-    include: ["packages/*/test/**/*.test.ts", "hooks/test/**/*.test.ts"],
+    include: ["packages/*/test/**/*.test.ts", "hooks/test/**/*.test.ts", "test/**/*.test.ts"],
     exclude: [...configDefaults.exclude, "**/test/fixtures/**"],
     /**
      * The suite creates around ninety temporary directories per run and used to

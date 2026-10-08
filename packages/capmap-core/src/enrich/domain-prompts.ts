@@ -1,9 +1,7 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { RepoEntry } from "../config/schema.js";
 import type { PackageEntry } from "../model/index-schema.js";
-
-const MAX_EXCERPT_CHARS = 4000;
+import { UNTRUSTED_NOTICE, fence, readExcerpt } from "./untrusted.js";
 
 export const DOMAIN_SYSTEM_PROMPT = [
   "You group the packages of one repository into coherent capability domains",
@@ -14,24 +12,18 @@ export const DOMAIN_SYSTEM_PROMPT = [
   'Every id is "<repoId>/<kebab-case-domain>". Use only the package ids supplied.',
   "domainTags come exclusively from the supplied vocabulary, between one and six per domain.",
   "Prefer three to eight domains for a large repository, one or two for a small one.",
+  UNTRUSTED_NOTICE,
 ].join(" ");
-
-async function excerpt(path: string): Promise<string> {
-  try {
-    return (await readFile(path, "utf8")).slice(0, MAX_EXCERPT_CHARS);
-  } catch {
-    return "";
-  }
-}
 
 export async function buildDomainPrompt(
   repo: RepoEntry,
   repoRootAbs: string,
   packages: PackageEntry[],
   vocabulary: string[],
+  maxExcerptChars: number,
 ): Promise<string> {
-  const claude = await excerpt(join(repoRootAbs, "CLAUDE.md"));
-  const readme = await excerpt(join(repoRootAbs, "README.md"));
+  const claude = await readExcerpt(repoRootAbs, join(repoRootAbs, "CLAUDE.md"), maxExcerptChars);
+  const readme = await readExcerpt(repoRootAbs, join(repoRootAbs, "README.md"), maxExcerptChars);
   const listed = packages
     .map(
       (p) =>
@@ -43,9 +35,9 @@ export async function buildDomainPrompt(
   return [
     `repository: ${repo.id} (tier ${repo.tier})`,
     `vocabulary: ${vocabulary.join(", ")}`,
-    claude === "" ? "" : `CLAUDE.md:\n${claude}`,
-    readme === "" ? "" : `README.md:\n${readme}`,
-    `packages:\n${listed}`,
+    claude === "" ? "" : fence("CLAUDE.md", claude),
+    readme === "" ? "" : fence("README.md", readme),
+    `packages:\n${fence("PACKAGES", listed)}`,
   ]
     .filter((line) => line !== "")
     .join("\n\n");

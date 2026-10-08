@@ -2,6 +2,7 @@ import type { ScanConfig } from "../config/schema.js";
 import type { PackageEntry, RepoIndex } from "../model/index-schema.js";
 import type { Logger, ModelClient } from "../ports/index.js";
 import { normaliseComponents } from "./components.js";
+import { sanitiseModelText } from "../enrich/untrusted.js";
 import {
   RANK_SYSTEM_PROMPT,
   SELECT_SYSTEM_PROMPT,
@@ -10,12 +11,10 @@ import {
   RankingsSchema,
   SelectionSchema,
   extractJson,
+  renderCandidates,
   renderCatalogue,
   type PackageRanking,
 } from "./match-parse.js";
-
-/** Number of a package's exported symbols shown to the ranker. Purely a prompt-shaping slice. */
-const EXPORTS_SHOWN = 12;
 
 export interface SelectCandidatesArgs {
   components: string[];
@@ -63,7 +62,6 @@ export async function selectCandidateDomains(
         `Return at most ${args.config.maxCandidates} domains per component.`,
       ].join("\n\n"),
       model: args.config.model,
-      effort: args.config.effort,
       maxTokens: args.maxTokens,
     });
   } catch (error) {
@@ -108,16 +106,6 @@ export interface RankArgs {
   maxTokens: number;
 }
 
-function renderCandidates(candidates: PackageEntry[]): string {
-  return candidates
-    .map(
-      (p) =>
-        `- ${p.id} [${p.kind}, ${p.maturity}] ${p.name}: ${p.summary ?? "no summary available"}` +
-        ` (exports: ${p.exports.slice(0, EXPORTS_SHOWN).join(", ")})`,
-    )
-    .join("\n");
-}
-
 /**
  * One model call per component ranks the packages of its shortlisted domains. A package id
  * outside the supplied candidate set is rejected and the call retried; exhausting the
@@ -151,7 +139,6 @@ export async function rankPackagesForComponent(
         system: RANK_SYSTEM_PROMPT,
         user,
         model: args.config.model,
-        effort: args.config.effort,
         maxTokens: args.maxTokens,
       });
     } catch (error) {
@@ -176,7 +163,12 @@ export async function rankPackagesForComponent(
           seen.add(ranking.packageId);
           return true;
         })
-        .sort((a, b) => b.score - a.score || a.packageId.localeCompare(b.packageId));
+        .sort((a, b) => b.score - a.score || a.packageId.localeCompare(b.packageId))
+        // Rationales are printed in gate output and stored in the record.
+        .map((ranking) => ({
+          ...ranking,
+          rationale: sanitiseModelText(ranking.rationale, args.config.maxRationaleChars),
+        }));
       if (kept.length > 0) return kept;
     }
     args.logger.warn("package ranking produced an unusable result", {

@@ -3,12 +3,11 @@ import type { ModelClient, ModelRequest } from "@capmap/core";
 
 export const API_KEY_ENV_VAR = "ANTHROPIC_API_KEY";
 
-export class AnthropicModelClient implements ModelClient {
-  private readonly client: Anthropic;
+/** The one SDK surface the client uses, injected so tests drive the real class. */
+export type MessagesApi = Pick<Anthropic, "messages">;
 
-  constructor(apiKey: string) {
-    this.client = new Anthropic({ apiKey });
-  }
+export class AnthropicModelClient implements ModelClient {
+  constructor(private readonly client: MessagesApi) {}
 
   static fromEnv(env: NodeJS.ProcessEnv): AnthropicModelClient {
     const key = env[API_KEY_ENV_VAR];
@@ -17,7 +16,7 @@ export class AnthropicModelClient implements ModelClient {
         `${API_KEY_ENV_VAR} is not set; enrichment and matching require it`,
       );
     }
-    return new AnthropicModelClient(key);
+    return new AnthropicModelClient(new Anthropic({ apiKey: key }));
   }
 
   async complete(request: ModelRequest): Promise<string> {

@@ -1,4 +1,4 @@
-import type { RepoTier } from "../config/schema.js";
+import type { RepoTier, ScanConfig } from "../config/schema.js";
 import type { PackageKind, RepoIndex } from "../model/index-schema.js";
 
 export type SearchLayer = "domain" | "package" | "minor";
@@ -17,6 +17,7 @@ export interface SearchArgs {
   limit: number;
   tier?: RepoTier;
   kind?: PackageKind;
+  scoring: ScanConfig["search"];
 }
 
 /**
@@ -38,24 +39,35 @@ function tokenise(value: string): string[] {
   return value.toLowerCase().match(TOKEN) ?? [];
 }
 
-/** Fraction of the query terms present in a haystack, counting substrings at half credit. */
-function overlap(queryTerms: string[], haystack: string): number {
+/**
+ * Fraction of the query terms present in a haystack, counting substrings at
+ * half credit — only where the shorter side is long enough. An entry that
+ * contains a query term as a whole word is a hit at whatever fraction, so one
+ * word of a longer query still finds the capability it names; one whose only
+ * credit is substrings scores zero below the configured floor, so a query the
+ * index does not hold can still answer nothing.
+ */
+function overlap(queryTerms: string[], haystack: string, scoring: ScanConfig["search"]): number {
   const terms = new Set(tokenise(haystack));
   if (terms.size === 0) return 0;
   let matched = 0;
+  let exact = 0;
   for (const term of queryTerms) {
     if (terms.has(term)) {
       matched += 1;
+      exact += 1;
       continue;
     }
     for (const candidate of terms) {
+      if (Math.min(candidate.length, term.length) < scoring.minPartialTermLength) continue;
       if (candidate.includes(term) || term.includes(candidate)) {
         matched += PARTIAL_MATCH_CREDIT;
         break;
       }
     }
   }
-  return matched / queryTerms.length;
+  const fraction = matched / queryTerms.length;
+  return exact > 0 || fraction >= scoring.minTermOverlap ? fraction : 0;
 }
 
 function compareHits(a: SearchHit, b: SearchHit): number {
@@ -79,7 +91,7 @@ function collect(
       domain.domainTags.join(" "),
       domain.stack.join(" "),
     ].join(" ");
-    const score = overlap(terms, haystack) * LAYER_WEIGHT.domain;
+    const score = overlap(terms, haystack, args.scoring) * LAYER_WEIGHT.domain;
     if (score > 0) {
       hits.push({
         id: domain.id,
@@ -101,7 +113,7 @@ function collect(
       pkg.exports.join(" "),
       pkg.path,
     ].join(" ");
-    const score = overlap(terms, haystack) * LAYER_WEIGHT.package;
+    const score = overlap(terms, haystack, args.scoring) * LAYER_WEIGHT.package;
     if (score > 0) {
       hits.push({
         id: pkg.id,
@@ -115,7 +127,8 @@ function collect(
 
   for (const entry of repo.minor) {
     const score =
-      overlap(terms, `${entry.id} ${entry.path}`) * LAYER_WEIGHT.minor;
+      overlap(terms, `${entry.id} ${entry.path}`, args.scoring) *
+      LAYER_WEIGHT.minor;
     if (score > 0) {
       hits.push({
         id: entry.id,
@@ -138,7 +151,10 @@ function collect(
  * same index and query always produce the same ordering.
  */
 export function searchIndex(args: SearchArgs): SearchHit[] {
-  const terms = tokenise(args.query);
+  const stopwords = new Set(args.scoring.stopwords);
+  const terms = tokenise(args.query).filter(
+    (term) => term.length >= args.scoring.minQueryTermLength && !stopwords.has(term),
+  );
   if (terms.length === 0) return [];
 
   const hits: SearchHit[] = [];

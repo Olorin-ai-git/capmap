@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { DomainEntry, PackageEntry } from "../model/index-schema.js";
 import { DOMAIN_SYSTEM_PROMPT, buildDomainPrompt } from "./domain-prompts.js";
 import type { EnrichDomainsArgs } from "./domain-pass.js";
+import { sanitiseDomain } from "./untrusted.js";
 
 
 const MAX_TAGS = 6;
@@ -79,7 +80,7 @@ function toDomains(
     ].slice(0, MAX_TAGS);
     if (packages.length === 0 || domainTags.length === 0) continue;
     const members = args.packages.filter((p) => packages.includes(p.id));
-    domains.push({
+    const domain = sanitiseDomain({
       id: candidate.id,
       repo: args.repo.id,
       tier: args.repo.tier,
@@ -94,7 +95,8 @@ function toDomains(
         lastCommit: newestCommit(members),
       },
       scannedSha: args.scannedSha,
-    });
+    }, args.config.maxSummaryChars);
+    if (domain !== null) domains.push(domain);
   }
   return domains;
 }
@@ -109,6 +111,7 @@ export async function enrichDomainChunk(
     args.repoRootAbs,
     args.packages,
     args.vocabulary,
+    args.config.maxExcerptChars,
   );
 
   for (let attempt = 0; attempt <= args.config.maxRetries; attempt += 1) {
@@ -120,7 +123,6 @@ export async function enrichDomainChunk(
       system: DOMAIN_SYSTEM_PROMPT,
       user,
       model: args.config.model,
-      effort: args.config.effort,
       maxTokens: args.config.domainMaxTokens,
       });
     } catch (error) {

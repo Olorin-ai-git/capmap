@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { runRefresh } from "./commands/refresh.js";
+import { runEval } from "./commands/eval.js";
 import { runGateCommand } from "./commands/gate.js";
 import { runScan } from "./commands/scan.js";
 import { runSearch } from "./commands/search.js";
@@ -147,6 +148,22 @@ program
           ? (options["component"] as string[])
           : [],
         resolve: options["resolve"] === true,
+      }),
+    );
+  });
+
+program
+  .command("eval")
+  .argument("<labels>", "labelled set of components with their expected verdicts")
+  .description("Measure search recall and gate accuracy against a labelled set")
+  .option("--out <file>", "where to write the result; beside the labels by default")
+  .option("--no-gate", "measure search recall only, without the model")
+  .action(async (labels: string, options: Record<string, unknown>) => {
+    await withDeps((deps) =>
+      runEval(deps, {
+        labelsPath: labels,
+        outPath: typeof options["out"] === "string" ? options["out"] : null,
+        gate: options["gate"] !== false,
       }),
     );
   });

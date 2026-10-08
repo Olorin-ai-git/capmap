@@ -1,8 +1,9 @@
 import { readFile, realpath } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import {
   extractComponentsFromMarkdown,
   resolveGateDir,
+  resolveRepoRoot,
   resolveInteractively,
   runGate,
   unresolvedComponents,
@@ -30,21 +31,17 @@ export interface GateOptions {
   resolve: boolean;
 }
 
-/**
- * Components come from the document's `## Components` section; `--component` flags are
- * accepted only for a document that has none. Model extraction is deliberately absent — a gate
- * that guesses what it is gating produces a record whose hash means nothing,
- * and the operator would have no way to tell a guess from a reading.
- */
-async function readSpec(deps: CommandDeps, specAbs: string): Promise<string | null> {
-  try {
-    return await readFile(specAbs, "utf8");
-  } catch {
+const readSpec = (deps: CommandDeps, specAbs: string): Promise<string | null> =>
+  readFile(specAbs, "utf8").catch(() => {
     deps.writer.line(`cannot read specification at ${specAbs}`);
     return null;
-  }
-}
+  });
 
+/**
+ * Components come from the document's `## Components` section; `--component` flags are
+ * accepted only for a document that has none. Model extraction is deliberately absent: a guessed
+ * list gives a record whose hash means nothing, and the operator could not tell guess from reading.
+ */
 function componentsFor(
   deps: CommandDeps,
   opts: GateOptions,
@@ -78,7 +75,7 @@ function componentsFor(
   return listed;
 }
 
-function gateOnce(
+async function gateOnce(
   deps: CommandDeps,
   specAbs: string,
   specText: string,
@@ -86,8 +83,10 @@ function gateOnce(
   componentsSource: GateRecord["componentsSource"],
   context: IndexContext,
 ): Promise<GateRecord> {
+  const repoRoot = await resolveRepoRoot(specAbs);
   return runGate({
     specPath: specAbs,
+    featurePath: repoRoot === null ? specAbs : relative(repoRoot, specAbs),
     specText,
     components,
     componentsSource,
@@ -126,7 +125,8 @@ export async function runGateCommand(
     return EXIT_ERROR;
   }
 
-  const literal = isAbsolute(opts.specPath) ? opts.specPath : resolve(process.cwd(), opts.specPath);
+  // resolve() normalises `..` segments, as the hook does.
+  const literal = resolve(process.cwd(), opts.specPath);
   // Named and bound by where it resolves, as the hook names it: a record for
   // `specs/foo.md -> ../shared/bar.md` is gate-bar.json beside bar.md, or the
   // hook would look for a record the CLI never wrote and refuse every later edit.

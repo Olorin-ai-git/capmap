@@ -4,18 +4,21 @@
 ===================================================================
 
 PROVENANCE
-  Code commit under test: 77750d508f47cbe5fa08c2c51e113c7e4909df10
+  Code commit under test: b7153713d7151aa627812b96ad644a16d690bc25
+  Code tree digest: 375a4911bd35c17287d0ab3dc1a98f0b3a1c7e59a368586318509d0ebd5a881b
+  (the digest outlives a squash or rebase merge; the provenance check
+  falls back to it when the commit is no longer in the history)
   TWO clean clones of that ONE commit are used:
-    A) Darwin 25.5.0 arm64, node v24.12.0 — sections 1-9
+    A) Darwin 25.6.0 arm64, node v22.23.2 — sections 1-9
     B) Linux, docker node:22-bookworm-slim — section 10
   Both print the same commit and the same index generatedAt, so both ran
   against identical code and identical data. The index is a tracked
   artifact of the commit and is NOT regenerated during verification.
   A transcript is a tracked file, so it can never name the commit that
   contains it: committing it moves HEAD. The claim that matters is that
-  nothing since 77750d5 touches code, and it is checked rather than asserted:
+  nothing since b715371 touches code, and it is checked rather than asserted:
     node scripts/check-transcript-provenance.mjs
-  date: 2026-08-07T03:42:27Z
+  date: 2026-10-08T05:44:48Z
   Uncommitted in the source tree at generation time:
      M docs/operations/verification-transcript.txt
 
@@ -25,29 +28,27 @@ ls: packages/capmap-cli/dist: No such file or directory
 
 $ pnpm install --frozen-lockfile
 Scope: all 5 workspace projects
-(node:30681) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
-(Use `node --trace-deprecation ...` to show where the warning was created)
 Lockfile is up to date, resolution step is skipped
 Progress: resolved 1, reused 0, downloaded 0, added 0
-Packages: +339
+Packages: +322
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-Progress: resolved 339, reused 339, downloaded 0, added 339, done
+Progress: resolved 322, reused 322, downloaded 0, added 322, done
 
 devDependencies:
 + @capmap/cli 0.1.0 <- packages/capmap-cli
 + @eslint/js 9.39.5
-+ @types/node 22.20.1
++ @types/node 22.20.5
 + @vitest/coverage-v8 2.1.9
 + eslint 9.39.5
 + typescript 5.9.3
-+ typescript-eslint 8.65.0
++ typescript-eslint 8.71.1
 + vitest 2.1.9
 
-Done in 1.3s
+Done in 1.2s
 exit 0
 
 $ ls -l node_modules/.bin/capmap
--rwxr-xr-x@ 1 olorin  staff  2240 Aug  6 23:42 node_modules/.bin/capmap
+-rwxr-xr-x@ 1 olorin  staff  2240 Oct  8 01:44 node_modules/.bin/capmap
   ok   capmap linked by install alone
 
 $ pnpm -r build
@@ -75,13 +76,13 @@ exit 0
 === 2. QUALITY GATES ===
 $ pnpm typecheck
 
-> capability-map@ typecheck /private/var/folders/f5/8hvwmyw14_981msrd_nqrb_w0000gn/T/tmp.oojJd6K54o/capmap-verify
+> capability-map@ typecheck /private/var/folders/l6/3nrk3bl12j50dwqm9lk6v9d00000gn/T/tmp.gXYcsJFgGY/capmap-verify
 > tsc -b && tsc --noEmit -p tsconfig.test.json
 exit 0
 
 $ pnpm lint
 
-> capability-map@ lint /private/var/folders/f5/8hvwmyw14_981msrd_nqrb_w0000gn/T/tmp.oojJd6K54o/capmap-verify
+> capability-map@ lint /private/var/folders/l6/3nrk3bl12j50dwqm9lk6v9d00000gn/T/tmp.gXYcsJFgGY/capmap-verify
 > eslint .
 exit 0
 
@@ -92,9 +93,9 @@ exit 0
 
 === 3. TESTS AND COVERAGE (criterion 11) ===
 $ ANTHROPIC_API_KEY= vitest run --coverage
- Test Files  42 passed (42)
-      Tests  396 passed (396)
-All files          |   95.27 |    88.09 |   98.36 |   95.27 |                   
+ Test Files  55 passed (55)
+      Tests  509 passed (509)
+All files          |   96.29 |    89.99 |   99.13 |   96.29 |                   
 exit 0
 
 === 4. INDEX IDENTITY (criteria 1, 2) ===
@@ -134,7 +135,7 @@ vendor-toolkit: 1 packages, 0 minor
 warning: 0 domain entries is outside the configured band 1..20; run enrichment to populate the domain layer
 exit 0
 $ node scripts/report-index.mjs --scanned-without-enrichment   (in the scratch directory)
-generatedAt: 2026-08-07T03:43:45.686Z
+generatedAt: 2026-10-08T05:45:54.116Z
 root: example/estate
 schema: index.json and 3 repo files validated against @capmap/core
 repos: 3 in the manifest, 3 configured, 3 files on disk — 0 missing, 0 unexpected, 0 without a file, 0 orphan file(s)
@@ -172,7 +173,7 @@ exit 0
 
 === 5a. HOOK LATENCY (criterion 8, cost) ===
 $ node scripts/hook-latency.mjs
-hook 41.6ms   bare node 24.8ms   own work 16.8ms   ratio 0.68
+hook 72.6ms   bare node 47.8ms   own work 24.8ms   ratio 0.52
 budget: own work under 100ms — met
 exit 0
 
@@ -250,4 +251,48 @@ exit 0
   every check above met its expectation
   note: section 8a EXPECTS exit 1 — an index claiming an export the
   source does not have must be rejected, so exit 0 there is the failure
+
+=== 10. LINUX, second clean clone of the SAME commit ===
+$ docker run --platform linux/arm64 node:22-bookworm-slim  <install, build, gates, matrix, tests>
+commit: b7153713d7151aa627812b96ad644a16d690bc25
+host:   Linux 6.8.0-117-generic aarch64   node: v22.23.2
+git:    git version 2.39.5
+git present                       ok
+index generatedAt (same tracked artifact): 2026-08-07T03:26:46.673Z
+index manifest readable           ok
+pnpm install --frozen-lockfile   exit 0
++ vitest 2.1.9
+
+Done in 19.3s
+capmap linked by install alone    ok
+pnpm -r build                      exit 0
+hooks build: Done
+packages/capmap-cli build: Done
+packages/capmap-mcp build: Done
+pnpm exec capmap --version:      0.1.0
+capmap --version                  ok
+pnpm typecheck                     exit 0
+
+> capability-map@ typecheck /w
+> tsc -b && tsc --noEmit -p tsconfig.test.json
+pnpm lint                          exit 0
+
+> capability-map@ lint /w
+> eslint .
+source constraints                 exit 0
+source constraints satisfied across 4 source roots: no file over 200 lines, none of 13 placeholder terms, no console output, no literal endpoints or absolute home paths
+plus the 200-line ceiling across scripts
+hook enforcement matrix            exit 0
+  ok   [bypass    ] CAPMAP_GATE=off                  exit 0 (expected 0)
+
+14 cases, 0 failing
+hook latency                       exit 0
+hook 33.7ms   bare node 12.8ms   own work 21.0ms   ratio 1.64
+budget: own work under 100ms — met
+$ ANTHROPIC_API_KEY= vitest run --coverage
+ Test Files  55 passed (55)
+      Tests  509 passed (509)
+All files          |   96.29 |    89.97 |   99.13 |   96.29 |                   
+every command in the container exited 0
+exit 0
 

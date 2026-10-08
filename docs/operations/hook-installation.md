@@ -18,7 +18,7 @@ telling you to build it:
 cd /path/to/capability-map
 pnpm install && pnpm -r build
 CAPMAP_ROOT=/path/to/your/estate \
-CAPMAP_CONFIG_DIR=/path/to/capability-map/config \
+CAPMAP_CONFIG_DIR=/path/outside/the/checkout/config \
 ANTHROPIC_API_KEY=… \
   node packages/capmap-cli/dist/bin.js scan
 ```
@@ -36,7 +36,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "CAPMAP_CONFIG_DIR=/path/to/capability-map/config /absolute/path/to/node /path/to/capability-map/hooks/dist/gate-hook.js || exit 2"
+            "command": "CAPMAP_CONFIG_DIR=/path/outside/the/checkout/config /absolute/path/to/node /path/to/capability-map/hooks/dist/gate-hook.js || exit 2"
           }
         ]
       }
@@ -44,6 +44,9 @@ Add to `~/.claude/settings.json`:
   }
 }
 ```
+
+The configuration directory, and the index written beside it, belong outside
+the capability-map checkout: an index of a real estate is refused inside it.
 
 Name `node` by its absolute path (`command -v node` prints it). A bare `node` is
 looked up on `PATH`, where a writable directory ahead of the real one can hold a
@@ -100,9 +103,34 @@ files: a FIFO or device in their place is refused, not waited on.
 | Any component `UNRESOLVED`               | block, printing the verdict table                             |
 | Repositories stale                       | allow, with a warning                                         |
 
-Globs are configured in `config/scan.config.json` and match case-insensitively,
-including inside dot directories such as `.claude/worktrees`. Specifications are
-Markdown under `specs/` or `docs/superpowers/specs/`. Plans cover
+Globs default to `**/docs/superpowers/specs/**/*.{md,markdown}`,
+`**/specs/**/*.{md,markdown}`, `**/plans/**` and
+`**/docs/**/plan*.{md,markdown}`, and are configured in
+`config/scan.config.json`. Specifications are Markdown only, so an OpenAPI file
+kept beside a specification is never gated as one. Every file under `plans/`
+is a plan whatever its format, so a plan cannot skip the gate by its
+extension. The hook matches without regard to case, so `plan.MD` is gated like
+`plan.md`, and across dot-names, so a plan in an agent worktree under
+`.claude/worktrees/` is gated too. It normalises `..` segments first and
+matches the path inside the repository (the nearest folder holding `.git`), so
+folders above the checkout never decide what a file is.
+
+A gate record is named by the feature id. In a spec-kit layout
+(`specs/029-tenant-portal/spec.md`, `plan.md`, `tasks.md`, `contracts/…`) the
+numbered folder directly under `specs/` is the feature, so every file in it
+shares one record (a numbered directory anywhere else is not); a file
+named only for its role (`docs/feature-a/spec.md`) takes its directory's name.
+
+Wherever the spec globs gate a feature folder's `spec.md`, the hook applies the
+spec-kit roles: `spec.md` is the specification, `checklists/` is written while
+specifying and is not gated, and every other Markdown file in the folder
+(`plan.md`, `tasks.md`, `research.md`, `data-model.md`, `quickstart.md`,
+Markdown under `contracts/`) is a plan. Code and data files beside them
+(`openapi.yaml`, `package.json`) are left alone. Those are blocked until `spec.md` is gated and allowed once its record
+has no `UNRESOLVED` component.
+
+Specifications are
+Markdown (`.md` or `.markdown`) under `specs/` or `docs/superpowers/specs/`. Plans cover
 `**/plans/**`; Markdown under `docs/` named `plan`, `implementation`, or with
 `plan` or `implementation` as a whole `-`/`_`-separated part of the name
 (`foo-plan.md`, `plan-foo.md`, `foo_implementation_v2.md`, but not

@@ -1,5 +1,6 @@
 import type { RepoEntry } from "../config/schema.js";
 import type { PackageEntry } from "../model/index-schema.js";
+import { sanitiseModelText } from "../enrich/untrusted.js";
 import type { Git } from "../ports/index.js";
 import { detectDeployTarget, type DeployTarget } from "./deploy-target.js";
 import { collectMetrics, type PackageMetrics } from "./metrics.js";
@@ -66,6 +67,14 @@ export interface EntryContext {
 }
 
 /**
+ * A manifest-sourced name as one printable line. Names are arbitrary strings
+ * from the scanned repository, and `show` and MCP print what is stored.
+ */
+function flatten(text: string): string {
+  return sanitiseModelText(text, Number.POSITIVE_INFINITY);
+}
+
+/**
  * Project a unit and its facts onto an index entry. Model-supplied fields stay
  * empty here: a later enrichment pass owns `summary` and `domainTags`.
  */
@@ -78,12 +87,15 @@ export function toPackageEntry(
     id: unit.id,
     repo: ctx.repo.id,
     kind: unit.manifest.kind,
-    name: unit.manifest.name,
+    name: flatten(unit.manifest.name),
     path: facts.path,
     manifest: unit.candidate.manifestFile,
     entry: unit.manifest.entryRelPath,
     exports: facts.exports,
-    deps: unit.manifest.deps,
+    deps: {
+      internal: unit.manifest.deps.internal.map(flatten),
+      external: unit.manifest.deps.external.map(flatten),
+    },
     consumers: ctx.consumers,
     deployTarget: facts.deployTarget,
     loc: facts.metrics.loc,

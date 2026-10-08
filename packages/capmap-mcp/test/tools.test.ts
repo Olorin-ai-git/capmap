@@ -140,3 +140,14 @@ describe("capmap_gate", () => {
     expect(result.components[0]?.name).toBe("ui kit");
   });
 });
+
+describe("capmap_search kind filter", () => {
+  it("offers every package kind the index can hold, including Python sub-packages", async () => {
+    const { PackageKindSchema } = await import("@capmap/core");
+    const { readTools } = await import("../src/tools/read.js");
+    const search = readTools({} as never).find((tool) => tool.name === "capmap_search");
+    const kind = (search?.inputSchema as unknown as { properties: { kind: { enum: string[] } } }).properties.kind;
+    expect(kind.enum).toEqual(PackageKindSchema.options);
+    expect(kind.enum).toContain("py-subpackage");
+  });
+});

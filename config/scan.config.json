@@ -25,17 +25,14 @@
     "vendor",
     "venv"
   ],
-  "excludeRepoGlobs": [
-    "*-wt",
-    "*-worktrees",
-    "_archive",
-    "docs"
-  ],
   "internalScopes": [
     "@alpha/",
     "@beta/",
     "@vendor/"
   ],
+  "python": {
+    "subpackageMaxDepth": 3
+  },
   "significance": {
     "threshold": 0.45,
     "weights": {
@@ -54,6 +51,12 @@
   "maturity": {
     "gaRecencyDays": 180
   },
+  "search": {
+    "minTermOverlap": 0.5,
+    "minPartialTermLength": 4,
+    "minQueryTermLength": 2,
+    "stopwords": ["a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "in", "into", "is", "it", "of", "on", "or", "that", "the", "this", "to", "via", "we", "what", "with"]
+  },
   "verdicts": {
     "reuseThreshold": 0.7,
     "extendThreshold": 0.5,
@@ -62,36 +65,37 @@
   "matching": {
     "maxCandidates": 10,
     "model": "claude-opus-5",
-    "effort": "high",
     "selectMaxTokens": 6000,
-    "rankMaxTokens": 4000
+    "rankMaxTokens": 4000,
+    "maxRationaleChars": 400
   },
   "enrichment": {
     "model": "claude-sonnet-5",
-    "effort": "medium",
     "maxRetries": 2,
     "concurrency": 8,
     "packageMaxTokens": 512,
     "domainMaxTokens": 4096,
-    "maxPackagesPerDomainCall": 25
+    "maxPackagesPerDomainCall": 25,
+    "maxExcerptChars": 4000,
+    "maxSummaryChars": 600
   },
   "hook": {
     "specGlobs": [
-      "**/docs/superpowers/specs/**/*.md",
-      "**/specs/**/*.md"
+      "**/docs/superpowers/specs/**/*.{md,markdown}",
+      "**/specs/**/*.{md,markdown}"
     ],
     "planGlobs": [
       "**/plans/**",
-      "**/docs/**/plan.md",
-      "**/docs/**/plan[-_]*.md",
-      "**/docs/**/*[-_]plan.md",
-      "**/docs/**/*[-_]plan[-_]*.md",
-      "**/docs/**/implementation.md",
-      "**/docs/**/implementation[-_]*.md",
-      "**/docs/**/*[-_]implementation.md",
-      "**/docs/**/*[-_]implementation[-_]*.md",
-      "**/specs/**/plan.md",
-      "**/specs/**/tasks.md"
+      "**/docs/**/plan.{md,markdown}",
+      "**/docs/**/plan[-_]*.{md,markdown}",
+      "**/docs/**/*[-_]plan.{md,markdown}",
+      "**/docs/**/*[-_]plan[-_]*.{md,markdown}",
+      "**/docs/**/implementation.{md,markdown}",
+      "**/docs/**/implementation[-_]*.{md,markdown}",
+      "**/docs/**/*[-_]implementation.{md,markdown}",
+      "**/docs/**/*[-_]implementation[-_]*.{md,markdown}",
+      "**/specs/**/plan.{md,markdown}",
+      "**/specs/**/tasks.{md,markdown}"
     ],
     "exemptGlobs": [
       "**/.claude/plans/*.md"

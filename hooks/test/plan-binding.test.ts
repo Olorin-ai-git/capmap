@@ -51,14 +51,16 @@ describe("specReference", () => {
 describe("namedSpec", () => {
   it("looks beside the plan, then at the root, and takes spec-kit's spec.md", async () => {
     const dir = await root();
-    expect(await namedSpec(join(dir, "plans", "p.md"), "Spec: specs/foo.md", dir)).toBe(join(dir, "specs", "foo.md"));
-    expect(await namedSpec(join(dir, "plans", "p.md"), "Spec: ../specs/foo.md", dir)).toBe(join(dir, "specs", "foo.md"));
-    expect(await namedSpec(join(dir, "plans", "p.md"), "Spec: /abs.md", dir)).toBe("/abs.md");
-    expect(await namedSpec(join(dir, "plans", "p.md"), "Spec: gone.md", dir)).toBe(join(dir, "plans", "gone.md"));
-    expect(await namedSpec(join(dir, "plans", "p.md"), null, dir)).toBeNull();
+    expect(await namedSpec(join(dir, "plans", "p.md"), "plans/p.md", "Spec: specs/foo.md", dir)).toBe(join(dir, "specs", "foo.md"));
+    expect(await namedSpec(join(dir, "plans", "p.md"), "plans/p.md", "Spec: ../specs/foo.md", dir)).toBe(join(dir, "specs", "foo.md"));
+    expect(await namedSpec(join(dir, "plans", "p.md"), "plans/p.md", "Spec: /abs.md", dir)).toBe("/abs.md");
+    expect(await namedSpec(join(dir, "plans", "p.md"), "plans/p.md", "Spec: gone.md", dir)).toBe(join(dir, "plans", "gone.md"));
+    expect(await namedSpec(join(dir, "plans", "p.md"), "plans/p.md", null, dir)).toBeNull();
     await mkdir(join(dir, "specs", "001-x"));
     await writeFile(join(dir, "specs", "001-x", "spec.md"), SPEC_TEXT);
-    expect(await namedSpec(join(dir, "specs", "001-x", "tasks.md"), null, dir)).toBe(join(dir, "specs", "001-x", "spec.md"));
+    for (const doc of ["tasks.md", "research.md", "contracts/api.md"]) {
+      expect(await namedSpec(join(dir, "specs", "001-x", doc), `specs/001-x/${doc}`, null, dir)).toBe(join(dir, "specs", "001-x", "spec.md"));
+    }
   });
 });
 

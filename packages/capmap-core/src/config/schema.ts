@@ -26,8 +26,14 @@ const WEIGHT_SUM_TOLERANCE = 1e-6;
 export const ScanConfigSchema = z.object({
   root: z.string().min(1).nullable(),
   excludePaths: z.array(z.string().min(1)).min(1),
-  excludeRepoGlobs: z.array(z.string().min(1)),
   internalScopes: z.array(z.string().min(1)).min(1),
+  python: z.object({
+    /**
+     * Levels of Python packages indexed below each import root of a project.
+     * A monolith's services sit two or three levels down (`app/services/x`).
+     */
+    subpackageMaxDepth: z.number().int().nonnegative(),
+  }),
   significance: z.object({
     threshold: z.number().min(0).max(1),
     weights: WeightsSchema.refine(
@@ -41,6 +47,26 @@ export const ScanConfigSchema = z.object({
     recencyHalfLifeDays: z.number().positive(),
   }),
   maturity: z.object({ gaRecencyDays: z.number().positive() }),
+  search: z.object({
+    /**
+     * Fraction of the query's terms an entry must match, before layer
+     * weighting, to be a hit at all — so "nothing covers this" is answerable.
+     */
+    minTermOverlap: z.number().min(0).max(1),
+    /**
+     * Shortest token that may earn substring credit. Without it "a" or "op"
+     * matched inside every longer word and every query returned something.
+     */
+    minPartialTermLength: z.number().int().positive(),
+    /** Query words shorter than this ("a", "x") carry no meaning and are ignored. */
+    minQueryTermLength: z.number().int().positive(),
+    /**
+     * Query words that carry no meaning ("for", "the", "via"). They are dropped
+     * before matching, so they neither match every summary nor count against
+     * the floor. Lower case; the list is the query language's.
+     */
+    stopwords: z.array(z.string()),
+  }),
   verdicts: z
     .object({
       reuseThreshold: z.number().min(0).max(1),
@@ -60,15 +86,15 @@ export const ScanConfigSchema = z.object({
   matching: z.object({
     maxCandidates: z.number().int().positive(),
     model: z.string().min(1),
-    effort: z.string().min(1),
     /** Token ceiling for the one call that shortlists domains for all components. */
     selectMaxTokens: z.number().int().positive(),
     /** Token ceiling for each per-component ranking call. */
     rankMaxTokens: z.number().int().positive(),
+    /** Longest ranking rationale kept; it is printed and stored. */
+    maxRationaleChars: z.number().int().positive(),
   }),
   enrichment: z.object({
     model: z.string().min(1),
-    effort: z.string().min(1),
     maxRetries: z.number().int().nonnegative(),
     concurrency: z.number().int().positive(),
     /** Response ceiling for one package summary. */
@@ -81,6 +107,10 @@ export const ScanConfigSchema = z.object({
      * the estate once ended up with no domains at all.
      */
     maxPackagesPerDomainCall: z.number().int().positive(),
+    /** Characters of each README, CLAUDE.md or entry file shown to the model. */
+    maxExcerptChars: z.number().int().positive(),
+    /** Longest package or domain summary or title stored in the index. */
+    maxSummaryChars: z.number().int().positive(),
   }),
   hook: z.object({
     /**

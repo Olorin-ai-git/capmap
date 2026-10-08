@@ -1,4 +1,4 @@
-import type { RepoTier } from "@capmap/core";
+import { sanitiseModelText, type RepoTier } from "@capmap/core";
 import type {
   DomainEntry,
   MinorEntry,
@@ -47,7 +47,8 @@ function flag(value: boolean): string {
  */
 function renderFields(heading: string, fields: Field[]): string {
   return [
-    heading,
+    // Ids come from directory names; the table cleans its cells, this line too.
+    sanitiseModelText(heading, Number.POSITIVE_INFINITY),
     renderTable({
       headers: [FIELD_HEADER, VALUE_HEADER],
       rows: fields.map(([name, value]) => [name, value]),

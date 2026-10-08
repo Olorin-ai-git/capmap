@@ -1,5 +1,6 @@
 import { access } from "node:fs/promises";
-import { dirname, join, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
+import { classifyPath } from "./classify.js";
 import { BYPASS_ENV_VAR, BYPASS_VALUE, decide, type Decision } from "./decide.js";
 import { deriveFeatureId } from "./feature-id.js";
 import { bindingProblem, canonical, isGateRecordPath, parseGateRecord } from "./gate-record.js";
@@ -40,18 +41,38 @@ async function exists(path: string): Promise<boolean> {
 }
 
 /**
- * Gate records live beside the repository they describe, so a specification and
- * its plan resolve to the same directory however deeply either is nested.
+ * The repository a file belongs to (the nearest folder holding `.git`), or the
+ * file's own folder outside any. Gate records live beside it, so a
+ * specification and its plan resolve to the same directory however deeply
+ * either is nested; `capmap gate` finds it the same way.
  */
-async function gateDirFor(fileAbs: string): Promise<string> {
+async function repoRootFor(fileAbs: string): Promise<{ root: string; inRepo: boolean }> {
   let current = dirname(fileAbs);
   for (;;) {
-    if (await exists(join(current, GIT_DIR))) return join(current, GATE_DIR);
+    if (await exists(join(current, GIT_DIR))) return { root: current, inRepo: true };
     const parent = dirname(current);
-    if (parent === current) return join(dirname(fileAbs), GATE_DIR);
+    if (parent === current) return { root: dirname(fileAbs), inRepo: false };
     current = parent;
   }
 }
+
+const gateDirFor = async (fileAbs: string): Promise<string> => join((await repoRootFor(fileAbs)).root, GATE_DIR);
+
+/**
+ * The path inside its repository, which classification and feature ids are
+ * read from, so folders above the checkout (`/work/specs/100-acme/repo`,
+ * `/x/plans/repo`) never decide what a file is. Outside any repository it is
+ * the path itself.
+ */
+async function repoPath(fileAbs: string): Promise<string> {
+  const { root, inRepo } = await repoRootFor(fileAbs);
+  return inRepo ? relative(root, fileAbs) : fileAbs;
+}
+
+async function kindOf(path: string, ctx: Context): Promise<{ isSpec: boolean; isPlan: boolean }> {
+  return classifyPath(await repoPath(path), { spec: ctx.isSpec, plan: ctx.isPlan });
+}
+const specFile = async (path: string, ctx: Context): Promise<boolean> => (await kindOf(path, ctx)).isSpec;
 
 export function blockUnlessBypassed(ctx: Context, what: string, path: string): Decision {
   return ctx.bypass
@@ -65,7 +86,7 @@ const within = (dir: string, path: string): boolean =>
 
 /** The record named for the specification at `specAbs`, parsed, or why it is no record. */
 async function recordFor(specAbs: string): Promise<ReturnType<typeof parseGateRecord> | null> {
-  const feature = deriveFeatureId(specAbs);
+  const feature = deriveFeatureId(await repoPath(specAbs));
   const path = join(await gateDirFor(specAbs), `gate-${feature}.json`);
   return (await exists(path)) ? parseGateRecord(await readRegularFile(path), feature) : null;
 }
@@ -73,7 +94,8 @@ async function recordFor(specAbs: string): Promise<ReturnType<typeof parseGateRe
 async function decidePlan(target: Target, fileAbs: string, ctx: Context): Promise<Decision> {
   if (ctx.bypass) return { allow: true, warning: `${BYPASS_ENV_VAR}=${BYPASS_VALUE}: reuse gate bypassed` };
   const text = target.input === null ? null : (await pendingDocument(fileAbs, target.input)).text;
-  const spec = await namedSpec(fileAbs, text, dirname(await gateDirFor(fileAbs)));
+  const planPath = await repoPath(fileAbs);
+  const spec = await namedSpec(fileAbs, planPath, text, dirname(await gateDirFor(fileAbs)));
   if (spec === null) {
     return blockUnlessBypassed(
       ctx,
@@ -84,11 +106,12 @@ async function decidePlan(target: Target, fileAbs: string, ctx: Context): Promis
     );
   }
   const specAbs = await canonical(spec);
-  if (!filedUnder(fileAbs, specAbs)) {
+  const specPath = await repoPath(specAbs);
+  if (!filedUnder(planPath, specPath)) {
     return blockUnlessBypassed(
       ctx,
-      `Writing a plan of feature "${deriveFeatureId(fileAbs)}" that names the specification of feature ` +
-        `"${deriveFeatureId(specAbs)}" (${spec}) — name the plan after the specification it implements —`,
+      `Writing a plan of feature "${deriveFeatureId(planPath)}" that names the specification of feature ` +
+        `"${deriveFeatureId(specPath)}" (${spec}) — name the plan after the specification it implements —`,
       fileAbs,
     );
   }
@@ -97,7 +120,7 @@ async function decidePlan(target: Target, fileAbs: string, ctx: Context): Promis
   const problem =
     parsed === null
       ? null
-      : parsed.problem ?? (await bindingProblem(parsed.record, { plan: specAbs, indexGeneratedAt }, ctx.isSpec));
+      : parsed.problem ?? (await bindingProblem(parsed.record, { plan: specAbs, indexGeneratedAt }, (path) => specFile(path, ctx)));
   return decide({
     filePath: fileAbs,
     fileExists: await exists(fileAbs),
@@ -124,9 +147,9 @@ export async function evaluate(target: Target, ctx: Context): Promise<Decision> 
   }
   // An exempt name is exempt only where the write lands too: `.claude/plans/x.md`
   // linked to `plans/foo-plan.md` writes a plan.
-  const guarded = [raw, fileAbs].filter((path) => !ctx.isExempt(path));
-  const isSpec = guarded.some(ctx.isSpec);
-  const isPlan = guarded.some(ctx.isPlan);
+  const kinds = await Promise.all([raw, fileAbs].filter((path) => !ctx.isExempt(path)).map((path) => kindOf(path, ctx)));
+  const isSpec = kinds.some((kind) => kind.isSpec);
+  const isPlan = kinds.some((kind) => kind.isPlan);
   if (!isSpec && !isPlan) return { allow: true, warning: null };
 
   const found = isSpec ? await recordFor(fileAbs) : null;
@@ -147,7 +170,7 @@ export async function evaluate(target: Target, ctx: Context): Promise<Decision> 
     isPlan,
     record: own?.record ?? null,
     recordProblem:
-      own === null ? null : own.problem ?? (await bindingProblem(own.record, { spec: fileAbs }, ctx.isSpec)),
+      own === null ? null : own.problem ?? (await bindingProblem(own.record, { spec: fileAbs }, (path) => specFile(path, ctx))),
     currentComponentsHash:
       target.input === null ? AMBIGUOUS_EDIT_HASH : await pendingHash(fileAbs, target.input),
     indexPresent: ctx.indexGeneratedAt !== null,

@@ -9,6 +9,7 @@
     "packages/*/test/**/*.ts",
     "hooks/src/**/*.ts",
     "hooks/test/**/*.ts",
+    "test/**/*.ts",
     "vitest.config.ts"
   ],
   "exclude": ["**/node_modules/**", "**/dist/**", "**/test/fixtures/**"]

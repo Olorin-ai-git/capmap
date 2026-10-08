@@ -96,7 +96,6 @@ async function reconsider(
     score,
     tier: located.tier,
     verified: verification.ok,
-    isMinor: located.isMinor,
     thresholds: args.thresholds,
   });
   const resolved = verdict !== "BUILD" && verdict !== "UNRESOLVED";

@@ -17,7 +17,7 @@ const SOURCE_EXTENSIONS = new Set([
   ".mts",
   ".cts",
 ]);
-const TEST_DIR_NAMES = new Set(["test", "tests", "__tests__", "spec"]);
+export const TEST_DIR_NAMES: ReadonlySet<string> = new Set(["test", "tests", "__tests__", "spec"]);
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$|^test_.*\.py$|_test\.py$/;
 const README_FILE = "README.md";
 

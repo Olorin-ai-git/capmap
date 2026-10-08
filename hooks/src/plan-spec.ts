@@ -1,6 +1,6 @@
 import { access } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { deriveFeatureId } from "./feature-id.js";
+import { dirname, isAbsolute, resolve } from "node:path";
+import { deriveFeatureId, specKitLocation } from "./feature-id.js";
 
 /**
  * Which specification a plan implements.
@@ -18,7 +18,6 @@ const MARKDOWN_LINK = /^\[[^\]]*\]\(\s*<?([^)\s>]+)>?[^)]*\)/;
 const BACKQUOTED = /^`([^`]+)`/;
 const ANGLED = /^<([^>]+)>/;
 const BARE = /^(\S+)/;
-const SPEC_KIT_PLAN = /^(plan|tasks)\.md$/i;
 const SPEC_KIT_SPEC = "spec.md";
 /** `plan-foo.md`, `implementation-foo.md`: the role in front of the feature rather than behind it. */
 const LEADING_ROLE = /^(plan|implementation)[-_]/i;
@@ -49,9 +48,18 @@ export function specReference(text: string): string | null {
  * when it names none. A relative reference is looked up beside the plan and
  * then at the repository root; `text` is null when the plan's content is unknown.
  */
-export async function namedSpec(planAbs: string, text: string | null, repoRoot: string): Promise<string | null> {
-  const sibling = join(dirname(planAbs), SPEC_KIT_SPEC);
-  if (SPEC_KIT_PLAN.test(basename(planAbs)) && (await exists(sibling))) return sibling;
+export async function namedSpec(
+  planAbs: string,
+  planPath: string,
+  text: string | null,
+  repoRoot: string,
+): Promise<string | null> {
+  // Every document of a spec-kit feature folder implements the folder's spec.md.
+  const specKit = specKitLocation(planPath);
+  if (specKit !== null) {
+    const spec = planAbs.slice(0, planAbs.length - specKit.within.length) + SPEC_KIT_SPEC;
+    if (await exists(spec)) return spec;
+  }
   const reference = text === null ? null : specReference(text);
   if (reference === null) return null;
   if (isAbsolute(reference)) return reference;

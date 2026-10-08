@@ -75,7 +75,12 @@ export async function runSearch(
   }
 
   const context = await loadIndexContext(deps);
-  const args: Parsed = { repos: context.repos, query: options.query, limit };
+  const args: Parsed = {
+    repos: context.repos,
+    query: options.query,
+    limit,
+    scoring: deps.config.scan.search,
+  };
   if (tier !== null && tier.success) args.tier = tier.data;
   if (kind !== null && kind.success) args.kind = kind.data;
 

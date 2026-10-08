@@ -142,6 +142,18 @@ describe(
       expect(deps.model.calls).toBe(0);
     });
 
+    it("enriches units the index never described even when HEAD has not moved", async () => {
+      const indexDir = await mkdtemp(join(tmpdir(), "capmap-scan-new-units-"));
+      const deps = await makeDeps({ indexDir, headShaByRepo: { alpha: "sha-1" } });
+      const opts = { repoIds: ["alpha"], dryRun: false, explain: false };
+      await runScan(deps, { ...opts, enrich: false });
+      expect(deps.model.calls).toBe(0);
+      await runScan(deps, opts);
+      const alpha = await new IndexStore({ indexDirAbs: indexDir }).readRepo("alpha");
+      expect(deps.model.calls).toBeGreaterThan(0);
+      expect(alpha.packages.every((p) => p.summary !== null)).toBe(true);
+    });
+
     it("does not spend enrichment calls on a dry run", async () => {
       const indexDir = await mkdtemp(join(tmpdir(), "capmap-scan-dry-"));
       const deps = await makeDeps({

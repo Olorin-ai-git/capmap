@@ -10,10 +10,10 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "picomatch": "^4.0.2"
+    "picomatch": "^4.0.7"
   },
   "devDependencies": {
     "@capmap/core": "workspace:*",
-    "@types/picomatch": "^3.0.1"
+    "@types/picomatch": "^3.0.2"
   }
 }

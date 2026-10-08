@@ -9,7 +9,6 @@ const T = {
 const base = {
   tier: "active" as const,
   verified: true,
-  isMinor: false,
   thresholds: T,
 };
 
@@ -48,12 +47,6 @@ describe("applyVerdict", () => {
     expect(applyVerdict({ ...base, score: 1, tier: "external" })).toBe(
       "REFERENCE",
     );
-  });
-
-  it("caps a minor entry at REFERENCE even from a core repository", () => {
-    expect(
-      applyVerdict({ ...base, score: 0.95, tier: "core", isMinor: true }),
-    ).toBe("REFERENCE");
   });
 
   it("does not promote a capped capability that scored below extend", () => {

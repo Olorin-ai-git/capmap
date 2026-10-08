@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { HOOK_GLOB_OPTIONS } from "./classify.js";
 import { BYPASS_ENV_VAR, BYPASS_VALUE } from "./decide.js";
 import { bashAnalysis } from "./bash-targets.js";
 import { blockUnlessBypassed, evaluate, type Context } from "./evaluate.js";
@@ -21,8 +22,6 @@ const PACKAGE_FILE = "package.json";
 const GLOB_LIBRARY = "picomatch";
 const BASH_TOOL = "Bash";
 const LINE_TERMINATOR = "\n";
-/** Case-insensitive, and into dot directories such as `.claude/worktrees`. */
-const GLOB_OPTIONS = { nocase: true, dot: true };
 
 /** Where the hook's own compiled code lives. */
 const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
@@ -62,7 +61,7 @@ async function run(configDir: string, bypass: boolean): Promise<number> {
   // Loaded here, not at module load, so a missing or broken dependency blocks instead of crashing open.
   const { default: picomatch } = await import("picomatch");
   const matcher = (globs: string[]): ((path: string) => boolean) =>
-    globs.length === 0 ? () => false : picomatch(globs, GLOB_OPTIONS);
+    globs.length === 0 ? () => false : picomatch(globs, HOOK_GLOB_OPTIONS);
   const hookPackage = dirname(HOOK_DIR);
   const library = dirname(createRequire(join(hookPackage, PACKAGE_FILE)).resolve(`${GLOB_LIBRARY}/${PACKAGE_FILE}`));
   const ctx: Context = {

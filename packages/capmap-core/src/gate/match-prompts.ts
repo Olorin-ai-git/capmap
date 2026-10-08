@@ -1,3 +1,5 @@
+import { UNTRUSTED_NOTICE } from "../enrich/untrusted.js";
+
 /**
  * System prompts for the two matching calls. Kept apart from the matcher so
  * that wording can be revised without touching parsing or validation logic.
@@ -19,6 +21,7 @@ export const SELECT_SYSTEM_PROMPT = [
   "those, include EVERY such platform domain you can see, from every repository, even",
   "where a purpose-built service also exists — the point is to reveal that the capability",
   "was built more than once, not to choose between them.",
+  UNTRUSTED_NOTICE,
 ].join(" ");
 
 export const RANK_SYSTEM_PROMPT = [
@@ -38,4 +41,5 @@ export const RANK_SYSTEM_PROMPT = [
   "having independently built the same capability is the single most useful thing you can",
   "surface, and reporting only a winner would hide it.",
   "Every packageId must come from the supplied candidates. Each rationale is one sentence.",
+  UNTRUSTED_NOTICE,
 ].join(" ");

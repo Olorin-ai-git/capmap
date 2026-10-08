@@ -19,6 +19,7 @@ function manifest(
     isPrivate: false,
     hasTestScript: false,
     parseError: null,
+    importRoots: [],
     ...overrides,
   };
 }

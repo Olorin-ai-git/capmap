@@ -29,7 +29,7 @@ step "node scripts/check-forbidden-terms.mjs" node scripts/check-forbidden-terms
 echo "=== 3. TESTS AND COVERAGE (criterion 11) ==="
 echo "\$ ANTHROPIC_API_KEY= vitest run --coverage"
 ANTHROPIC_API_KEY="" ./node_modules/.bin/vitest run --coverage --reporter=basic 2>&1 \
-  | grep -E "Test Files|Tests |All files|ERROR"
+  | grep -E "Test Files|Tests |All files|ERROR| FAIL "
 TESTS_RC=${PIPESTATUS[0]}
 echo "exit $TESTS_RC"; echo
 record "vitest run --coverage" "$TESTS_RC"

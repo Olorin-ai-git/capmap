@@ -12,21 +12,6 @@ const NAME_COLUMN_WIDTH = 24;
 const VERDICT_COLUMN_WIDTH = 11;
 const NO_TARGET = "—";
 
-/**
- * What the target document is.
- *
- * Deliberately two independent flags rather than one exclusive kind. The glob
- * sets can overlap — a specification living under a `plans/` tree, or any file
- * caught by the plan-prefixed-filename glob — and collapsing that to one winner
- * meant whichever set was tested first silently disabled the other's protection. A
- * path that is both gets BOTH rules: it may not be created ungated, and it may
- * not shed its gated component list.
- */
-export interface GuardedPath {
-  isSpec: boolean;
-  isPlan: boolean;
-}
-
 export interface DecideInput {
   /** Path the tool call is about to write, as it should be echoed back to the caller. */
   filePath: string;
@@ -174,7 +159,7 @@ export function decide(input: DecideInput): Decision {
     };
   }
 
-  // Filtered here rather than through the core helper: the hook has a 50 ms budget
+  // Filtered here rather than through the core helper: the hook has a 100 ms budget
   // and must not pull the schema module, and its dependencies, into its start-up.
   const unresolved = input.record.components.filter(
     (c) => c.verdict === BLOCKING_VERDICT,

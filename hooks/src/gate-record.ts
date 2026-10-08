@@ -148,7 +148,7 @@ export async function canonical(path: string): Promise<string> {
 export async function bindingProblem(
   record: GateRecord,
   target: { spec: string } | { plan: string; indexGeneratedAt: string },
-  isSpec: (path: string) => boolean,
+  isSpec: (path: string) => boolean | Promise<boolean>,
 ): Promise<string | null> {
   const specAbs = await canonical(record.specPath);
   if ("spec" in target) {
@@ -159,7 +159,7 @@ export async function bindingProblem(
   if (specAbs !== (await canonical(target.plan))) {
     return `it was produced for ${record.specPath}, not ${target.plan}, the specification this plan names`;
   }
-  if (!isSpec(record.specPath) && !isSpec(specAbs)) {
+  if (!(await isSpec(record.specPath)) && !(await isSpec(specAbs))) {
     return `it was produced for ${record.specPath}, which is not a specification by the configured globs`;
   }
   if (record.indexGeneratedAt !== target.indexGeneratedAt) {

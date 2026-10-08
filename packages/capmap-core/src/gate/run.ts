@@ -42,6 +42,11 @@ export interface RunGateArgs {
   specPath: string;
   /** The specification's text, which the record is bound to; null when none was read. */
   specText: string | null;
+  /**
+   * Path the feature id is derived from: the specification's path inside its
+   * repository, as the hook reads it. specPath when the caller has no repository.
+   */
+  featurePath?: string;
   components: string[];
   /** Whether `components` was read from the document or supplied as flags. */
   componentsSource: "document" | "flags";
@@ -116,7 +121,7 @@ export async function runGate(args: RunGateArgs): Promise<GateRecord> {
   return {
     schemaVersion: GATE_SCHEMA_VERSION,
     specPath: args.specPath,
-    feature: deriveFeatureId(args.specPath),
+    feature: deriveFeatureId(args.featurePath ?? args.specPath),
     componentsHash: hashComponents(components),
     specContentHash:
       args.specText === null ? null : specContentHash(args.specText),

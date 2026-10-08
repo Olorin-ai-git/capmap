@@ -20,23 +20,32 @@ const WRITE_SUFFIX = ".writing";
 const MISSING_FILE_CODE = "ENOENT";
 
 /**
- * Directory holding gate records for a document: `.capmap` under the nearest ancestor that
- * contains a `.git` entry, falling back to `.capmap` beside the document itself.
+ * The repository a document belongs to: the nearest ancestor that contains a
+ * `.git` entry, or null outside any. Feature ids are derived from the path
+ * inside it, exactly as the hook does, so folders above the checkout never
+ * name a record.
  */
-export async function resolveGateDir(fileAbsPath: string): Promise<string> {
-  const fileDir = dirname(fileAbsPath);
-  let current = fileDir;
+export async function resolveRepoRoot(fileAbsPath: string): Promise<string | null> {
+  let current = dirname(fileAbsPath);
   for (;;) {
     try {
       await access(join(current, GIT_DIR_NAME));
-      return join(current, GATE_DIR_NAME);
+      return current;
     } catch {
       /* not a repository root — keep walking up */
     }
     const parent = dirname(current);
-    if (parent === current) return join(fileDir, GATE_DIR_NAME);
+    if (parent === current) return null;
     current = parent;
   }
+}
+
+/**
+ * Directory holding gate records for a document: `.capmap` under its repository root,
+ * falling back to `.capmap` beside the document itself.
+ */
+export async function resolveGateDir(fileAbsPath: string): Promise<string> {
+  return join((await resolveRepoRoot(fileAbsPath)) ?? dirname(fileAbsPath), GATE_DIR_NAME);
 }
 
 function recordPath(dirAbs: string, feature: string): string {
