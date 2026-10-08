@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import {
   extractComponentsFromMarkdown,
   resolveGateDir,
+  resolveRepoRoot,
   resolveInteractively,
   runGate,
   unresolvedComponents,
@@ -74,9 +75,8 @@ export async function runGateCommand(
   deps: CommandDeps,
   opts: GateOptions,
 ): Promise<number> {
-  const specAbs = isAbsolute(opts.specPath)
-    ? opts.specPath
-    : resolve(process.cwd(), opts.specPath);
+  // resolve() normalises `..` segments, as the hook does.
+  const specAbs = resolve(process.cwd(), opts.specPath);
 
   const components = await componentsFor(deps, opts, specAbs);
   if (components === null) return EXIT_ERROR;
@@ -92,8 +92,10 @@ export async function runGateCommand(
     return EXIT_ERROR;
   }
 
+  const repoRoot = await resolveRepoRoot(specAbs);
   let record: GateRecord = await runGate({
     specPath: specAbs,
+    featurePath: repoRoot === null ? specAbs : relative(repoRoot, specAbs),
     components,
     componentsSource,
     repos: context.repos,

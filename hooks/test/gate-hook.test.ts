@@ -490,7 +490,7 @@ describe("spec-kit feature folders and plan formats (shipped globs)", () => {
     "research.md",
     "data-model.md",
     "quickstart.md",
-    "contracts/openapi.yaml",
+    "contracts/api.md",
   ];
 
   it("allows every implementing document once spec.md is gated", async () => {
@@ -532,5 +532,73 @@ describe("spec-kit feature folders and plan formats (shipped globs)", () => {
   it("leaves a non-Markdown file directly under specs/ alone (CM-10)", async () => {
     const { root, env } = await shipped();
     expect((await invoke(join(root, "specs", "openapi.yaml"), env)).code).toBe(0);
+  });
+});
+
+/**
+ * SP-3 audit rounds 4 and 5: the hook classified the path exactly as given and
+ * against every absolute ancestor. A dot-directory segment (an agent's
+ * `.claude/worktrees/` checkout), a `..` segment, or a numbered folder under a
+ * `specs/` directory ABOVE the repository changed what the globs saw, so plans
+ * were written ungated and ordinary code in a spec-kit folder was blocked.
+ */
+describe("path forms the gate must see the same way (SP-3 audit)", () => {
+  async function shipped(): Promise<{ root: string; env: NodeJS.ProcessEnv }> {
+    const { root, env } = await scenario();
+    const shippedHook = (JSON.parse(
+      await readFile(join(here, "..", "..", "config", "scan.config.json"), "utf8"),
+    ) as { hook: unknown }).hook;
+    const configFile = join(env["CAPMAP_CONFIG_DIR"] ?? "", "scan.config.json");
+    await writeFile(configFile, JSON.stringify({ hook: shippedHook, index: { dir: "index" } }));
+    return { root, env };
+  }
+
+  it("gates plans in an agent worktree under a dot-directory", async () => {
+    const { root, env } = await shipped();
+    const worktree = join(root, ".claude", "worktrees", "agent-1");
+    await mkdir(worktree, { recursive: true });
+    await writeFile(join(worktree, ".git"), "gitdir: elsewhere\n");
+    for (const path of [
+      join(worktree, "docs", "superpowers", "plans", "2026-10-07-x.md"),
+      join(worktree, "specs", "029-x", "plan.md"),
+      join(root, ".config", "plans", "2026-10-07-x.md"),
+      join(root, "docs", "superpowers", "plans", ".x.md"),
+    ]) {
+      expect({ path, code: (await invoke(path, env)).code }).toEqual({ path, code: EXIT_BLOCK });
+    }
+  });
+
+  it("gates a plan named through a .. segment", async () => {
+    const { root, env } = await shipped();
+    for (const path of [
+      join(root, "specs", "029-x", "checklists") + "/../plan.md",
+      join(root, "src") + "/../docs/superpowers/plans/x.md",
+    ]) {
+      expect({ path, code: (await invoke(path, env)).code }).toEqual({ path, code: EXIT_BLOCK });
+    }
+  });
+
+  it("leaves code and data files in a spec-kit folder alone (CM-10)", async () => {
+    const { root, env } = await shipped();
+    const feature = join(root, "specs", "004-portal");
+    await mkdir(join(feature, "contracts"), { recursive: true });
+    for (const name of ["contracts/openapi.yaml", "package.json", "frontend-components.ts"]) {
+      await writeFile(join(feature, name), "x\n");
+      expect({ name, code: (await invoke(join(feature, name), env)).code }).toEqual({ name, code: 0 });
+    }
+  });
+
+  it("reads only the path inside the repository, not the folders above it", async () => {
+    const { env } = await shipped();
+    const outer = await mkdtemp(join(tmpdir(), "capmap-outer-"));
+    scratch.push(outer);
+    const repo = join(outer, "specs", "100-acme", "repo");
+    await mkdir(join(repo, ".git"), { recursive: true });
+    await mkdir(join(repo, "src"), { recursive: true });
+    await writeFile(join(repo, "README.md"), "# readme\n");
+    await writeFile(join(repo, "src", "index.ts"), "x\n");
+    expect((await invoke(join(repo, "README.md"), env)).code).toBe(0);
+    expect((await invoke(join(repo, "src", "index.ts"), env)).code).toBe(0);
+    expect((await invoke(join(repo, "plans", "2026-10-07-x.md"), env)).code).toBe(EXIT_BLOCK);
   });
 });

@@ -1,14 +1,9 @@
 #!/usr/bin/env node
 import { access, readFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import picomatch from "picomatch";
-import {
-  BYPASS_ENV_VAR,
-  BYPASS_VALUE,
-  HOOK_GLOB_OPTIONS,
-  classifyPath,
-  decide,
-} from "./decide.js";
+import { HOOK_GLOB_OPTIONS, classifyPath } from "./classify.js";
+import { BYPASS_ENV_VAR, BYPASS_VALUE, decide } from "./decide.js";
 import { deriveFeatureId } from "./feature-id.js";
 import { pendingHash } from "./pending-document.js";
 
@@ -55,15 +50,16 @@ async function readStdin(): Promise<string> {
 }
 
 /**
- * Gate records live beside the repository they describe, so a specification and
- * its plan resolve to the same directory however deeply either is nested.
+ * The repository a file belongs to, or null outside any. Gate records live
+ * beside it, so a specification and its plan resolve to the same directory
+ * however deeply either is nested; `capmap gate` finds it the same way.
  */
-async function gateDirFor(fileAbs: string): Promise<string> {
+async function repoRootFor(fileAbs: string): Promise<string | null> {
   let current = dirname(fileAbs);
   for (;;) {
-    if (await exists(join(current, GIT_DIR))) return join(current, GATE_DIR);
+    if (await exists(join(current, GIT_DIR))) return current;
     const parent = dirname(current);
-    if (parent === current) return join(dirname(fileAbs), GATE_DIR);
+    if (parent === current) return null;
     current = parent;
   }
 }
@@ -97,9 +93,9 @@ async function main(): Promise<number> {
 
   const filePath = payload.tool_input?.file_path;
   if (filePath === undefined || filePath === "") return EXIT_ALLOW;
-  const fileAbs = isAbsolute(filePath)
-    ? filePath
-    : resolve(process.cwd(), filePath);
+  // resolve() also normalises an absolute path: a `..` segment kept as given
+  // hid the target from the globs while the Write went to the normalised file.
+  const fileAbs = resolve(process.cwd(), filePath);
 
   let config: HookConfig;
   try {
@@ -110,13 +106,17 @@ async function main(): Promise<number> {
     return EXIT_ALLOW;
   }
 
-  // Both are evaluated; the sets may overlap and each carries its own rule.
-  const { isSpec, isPlan } = classifyPath(fileAbs, {
+  // Classified and named by its path inside the repository, so folders above
+  // the checkout (`/work/specs/100-acme/repo`) say nothing about it. Both sets
+  // are evaluated; they may overlap and each carries its own rule.
+  const repoRoot = await repoRootFor(fileAbs);
+  const repoPath = repoRoot === null ? fileAbs : relative(repoRoot, fileAbs);
+  const { isSpec, isPlan } = classifyPath(repoPath, {
     spec: picomatch(config.hook.specGlobs, HOOK_GLOB_OPTIONS),
     plan: picomatch(config.hook.planGlobs, HOOK_GLOB_OPTIONS),
   });
-  const gateDir = await gateDirFor(fileAbs);
-  const recordPath = join(gateDir, `gate-${deriveFeatureId(fileAbs)}.json`);
+  const gateDir = join(repoRoot ?? dirname(fileAbs), GATE_DIR);
+  const recordPath = join(gateDir, `gate-${deriveFeatureId(repoPath)}.json`);
 
   let record = null;
   if (await exists(recordPath)) {

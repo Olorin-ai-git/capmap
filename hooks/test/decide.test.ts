@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { classifyPath, decide } from "../src/decide.js";
+import { classifyPath } from "../src/classify.js";
+import { decide } from "../src/decide.js";
 
 const HASH = `sha256:${"a".repeat(64)}`;
 
@@ -201,12 +202,13 @@ describe("a path matching BOTH glob sets gets both rules", () => {
 });
 
 describe("classifyPath", () => {
-  const specsGated = { spec: (p: string) => p.includes("/specs/"), plan: () => false };
+  const specsGated = { spec: (p: string) => p.includes("/specs/") && p.endsWith(".md"), plan: () => false };
 
   it("makes a spec-kit sibling a plan and spec.md the only specification", () => {
     expect(classifyPath("/r/specs/029-x/spec.md", specsGated)).toEqual({ isSpec: true, isPlan: false });
     expect(classifyPath("/r/specs/029-x/plan.md", specsGated)).toEqual({ isSpec: false, isPlan: true });
-    expect(classifyPath("/r/specs/029-x/contracts/a.yaml", specsGated)).toEqual({ isSpec: false, isPlan: true });
+    expect(classifyPath("/r/specs/029-x/contracts/a.md", specsGated)).toEqual({ isSpec: false, isPlan: true });
+    expect(classifyPath("/r/specs/029-x/contracts/a.yaml", specsGated)).toEqual({ isSpec: false, isPlan: false });
     expect(classifyPath("/r/specs/029-x/checklists/q.md", specsGated)).toEqual({ isSpec: false, isPlan: false });
   });
 

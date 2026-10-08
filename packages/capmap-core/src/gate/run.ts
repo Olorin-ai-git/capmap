@@ -13,6 +13,11 @@ import { packagesForDomains, resolveComponent } from "./resolve.js";
 
 export interface RunGateArgs {
   specPath: string;
+  /**
+   * Path the feature id is derived from: the specification's path inside its
+   * repository, as the hook reads it. specPath when the caller has no repository.
+   */
+  featurePath?: string;
   components: string[];
   /** Whether `components` was read from the document or supplied as flags. */
   componentsSource: "document" | "flags";
@@ -84,7 +89,7 @@ export async function runGate(args: RunGateArgs): Promise<GateRecord> {
   return {
     schemaVersion: GATE_SCHEMA_VERSION,
     specPath: args.specPath,
-    feature: deriveFeatureId(args.specPath),
+    feature: deriveFeatureId(args.featurePath ?? args.specPath),
     componentsHash: hashComponents(components),
     componentsSource: args.componentsSource,
     generatedAt: args.clock.now().toISOString(),

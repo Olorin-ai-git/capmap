@@ -152,4 +152,25 @@ describe("runGateCommand", () => {
     expect(record?.componentsHash).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(record?.specPath).toBe(specPath);
   });
+
+  /**
+   * SP-3 audit round 4: the feature id was read from the absolute path, so a
+   * checkout under `/work/specs/100-acme/` named every record "100-acme". The
+   * id comes from the path inside the repository, as the hook reads it.
+   */
+  it("names the record from the path inside the repository", async () => {
+    const outer = await mkdtemp(join(tmpdir(), "capmap-outer-"));
+    const repo = join(outer, "specs", "100-acme", "repo");
+    await mkdir(join(repo, ".git"), { recursive: true });
+    await mkdir(join(repo, "docs"), { recursive: true });
+    const specPath = join(repo, "docs", "2026-08-02-tenant-portal-design.md");
+    await writeFile(specPath, SPEC);
+    const deps = await gateDeps([
+      SHORTLIST,
+      rank([{ packageId: "alpha/ui-kit", score: 0.9, rationale: "Exact." }]),
+    ]);
+    await runGateCommand(deps, { specPath, components: [], resolve: false });
+    const record = await readGateRecord(await resolveGateDir(specPath), "tenant-portal");
+    expect(record?.feature).toBe("tenant-portal");
+  });
 });

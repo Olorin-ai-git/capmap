@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import picomatch from "picomatch";
-import { HOOK_GLOB_OPTIONS } from "../src/decide.js";
+import { HOOK_GLOB_OPTIONS } from "../src/classify.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +39,18 @@ describe.each([
       "/repo/specs/029-x/spec.Md",
       "/repo/plans/x.markdown",
       "/repo/docs/superpowers/specs/x.MARKDOWN",
+    ]) {
+      expect(hookGated(path)).toBe(true);
+    }
+  });
+
+  /** SP-3 audit round 5: `**` did not cross a dot-directory such as `.claude/worktrees/`. */
+  it("gates documents under a dot-directory or with a dot-file name", () => {
+    const hookGated = picomatch([...hook.specGlobs, ...hook.planGlobs], HOOK_GLOB_OPTIONS);
+    for (const path of [
+      "/repo/.claude/worktrees/a/docs/superpowers/plans/x.md",
+      "/repo/.claude/worktrees/a/specs/029-x/spec.md",
+      "/repo/plans/.x.md",
     ]) {
       expect(hookGated(path)).toBe(true);
     }
