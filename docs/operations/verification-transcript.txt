@@ -4,8 +4,8 @@
 ===================================================================
 
 PROVENANCE
-  Code commit under test: 282886884fdf50819c6b429c91a910a44f95d211
-  Code tree digest: 4df7ab2606a08af86219c11bb4ba26d125331bfe825730ec8502c4ea7e54e8d4
+  Code commit under test: b7153713d7151aa627812b96ad644a16d690bc25
+  Code tree digest: 375a4911bd35c17287d0ab3dc1a98f0b3a1c7e59a368586318509d0ebd5a881b
   (the digest outlives a squash or rebase merge; the provenance check
   falls back to it when the commit is no longer in the history)
   TWO clean clones of that ONE commit are used:
@@ -16,9 +16,9 @@ PROVENANCE
   artifact of the commit and is NOT regenerated during verification.
   A transcript is a tracked file, so it can never name the commit that
   contains it: committing it moves HEAD. The claim that matters is that
-  nothing since 2828868 touches code, and it is checked rather than asserted:
+  nothing since b715371 touches code, and it is checked rather than asserted:
     node scripts/check-transcript-provenance.mjs
-  date: 2026-10-07T19:20:19Z
+  date: 2026-10-08T05:44:48Z
   Uncommitted in the source tree at generation time:
      M docs/operations/verification-transcript.txt
 
@@ -44,11 +44,11 @@ devDependencies:
 + typescript-eslint 8.71.1
 + vitest 2.1.9
 
-Done in 1.3s
+Done in 1.2s
 exit 0
 
 $ ls -l node_modules/.bin/capmap
--rwxr-xr-x@ 1 olorin  staff  2240 Oct  7 15:20 node_modules/.bin/capmap
+-rwxr-xr-x@ 1 olorin  staff  2240 Oct  8 01:44 node_modules/.bin/capmap
   ok   capmap linked by install alone
 
 $ pnpm -r build
@@ -76,13 +76,13 @@ exit 0
 === 2. QUALITY GATES ===
 $ pnpm typecheck
 
-> capability-map@ typecheck /private/var/folders/l6/3nrk3bl12j50dwqm9lk6v9d00000gn/T/tmp.lu8momPXoe/capmap-verify
+> capability-map@ typecheck /private/var/folders/l6/3nrk3bl12j50dwqm9lk6v9d00000gn/T/tmp.gXYcsJFgGY/capmap-verify
 > tsc -b && tsc --noEmit -p tsconfig.test.json
 exit 0
 
 $ pnpm lint
 
-> capability-map@ lint /private/var/folders/l6/3nrk3bl12j50dwqm9lk6v9d00000gn/T/tmp.lu8momPXoe/capmap-verify
+> capability-map@ lint /private/var/folders/l6/3nrk3bl12j50dwqm9lk6v9d00000gn/T/tmp.gXYcsJFgGY/capmap-verify
 > eslint .
 exit 0
 
@@ -93,9 +93,9 @@ exit 0
 
 === 3. TESTS AND COVERAGE (criterion 11) ===
 $ ANTHROPIC_API_KEY= vitest run --coverage
- Test Files  52 passed (52)
-      Tests  469 passed (469)
-All files          |   96.17 |    89.88 |   99.08 |   96.17 |                   
+ Test Files  55 passed (55)
+      Tests  509 passed (509)
+All files          |   96.29 |    89.99 |   99.13 |   96.29 |                   
 exit 0
 
 === 4. INDEX IDENTITY (criteria 1, 2) ===
@@ -135,7 +135,7 @@ vendor-toolkit: 1 packages, 0 minor
 warning: 0 domain entries is outside the configured band 1..20; run enrichment to populate the domain layer
 exit 0
 $ node scripts/report-index.mjs --scanned-without-enrichment   (in the scratch directory)
-generatedAt: 2026-10-07T19:21:03.042Z
+generatedAt: 2026-10-08T05:45:54.116Z
 root: example/estate
 schema: index.json and 3 repo files validated against @capmap/core
 repos: 3 in the manifest, 3 configured, 3 files on disk — 0 missing, 0 unexpected, 0 without a file, 0 orphan file(s)
@@ -173,7 +173,7 @@ exit 0
 
 === 5a. HOOK LATENCY (criterion 8, cost) ===
 $ node scripts/hook-latency.mjs
-hook 71.0ms   bare node 49.4ms   own work 21.6ms   ratio 0.44
+hook 72.6ms   bare node 47.8ms   own work 24.8ms   ratio 0.52
 budget: own work under 100ms — met
 exit 0
 
@@ -254,7 +254,7 @@ exit 0
 
 === 10. LINUX, second clean clone of the SAME commit ===
 $ docker run --platform linux/arm64 node:22-bookworm-slim  <install, build, gates, matrix, tests>
-commit: 282886884fdf50819c6b429c91a910a44f95d211
+commit: b7153713d7151aa627812b96ad644a16d690bc25
 host:   Linux 6.8.0-117-generic aarch64   node: v22.23.2
 git:    git version 2.39.5
 git present                       ok
@@ -263,7 +263,7 @@ index manifest readable           ok
 pnpm install --frozen-lockfile   exit 0
 + vitest 2.1.9
 
-Done in 21.5s
+Done in 19.3s
 capmap linked by install alone    ok
 pnpm -r build                      exit 0
 hooks build: Done
@@ -287,12 +287,12 @@ hook enforcement matrix            exit 0
 
 14 cases, 0 failing
 hook latency                       exit 0
-hook 37.1ms   bare node 15.3ms   own work 21.8ms   ratio 1.42
+hook 33.7ms   bare node 12.8ms   own work 21.0ms   ratio 1.64
 budget: own work under 100ms — met
 $ ANTHROPIC_API_KEY= vitest run --coverage
- Test Files  52 passed (52)
-      Tests  469 passed (469)
-All files          |   96.17 |    89.86 |   99.08 |   96.17 |                   
+ Test Files  55 passed (55)
+      Tests  509 passed (509)
+All files          |   96.29 |    89.97 |   99.13 |   96.29 |                   
 every command in the container exited 0
 exit 0
 
