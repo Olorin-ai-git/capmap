@@ -40,6 +40,11 @@ export async function extractPyExports(
 }
 
 const PY_MODULE = /^([A-Za-z][A-Za-z0-9_]*)\.py$/;
+/**
+ * A directory name Python can import. Anything else (a newline, a terminal
+ * escape) cannot be a package, and must not reach the index as one.
+ */
+export const PY_IDENTIFIER = /^[\p{L}_][\p{L}\p{N}_]*$/u;
 const INIT_FILE = "__init__.py";
 
 /**
@@ -66,7 +71,11 @@ export async function extractPyPackageExports(
     const module = PY_MODULE.exec(entry.name)?.[1];
     if (entry.isFile() && module !== undefined && entry.name !== INIT_FILE) {
       names.push(module);
-    } else if (entry.isDirectory() && !entry.name.startsWith("_")) {
+    } else if (
+      entry.isDirectory() &&
+      !entry.name.startsWith("_") &&
+      PY_IDENTIFIER.test(entry.name)
+    ) {
       try {
         await access(join(dir, entry.name, INIT_FILE));
         names.push(entry.name);

@@ -1,6 +1,7 @@
 import { access, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { parse as parseToml } from "smol-toml";
+import { sanitiseModelText } from "../enrich/untrusted.js";
 import type { PackageEntry } from "../model/index-schema.js";
 import { extractPyPackageExports } from "../scanner/exports-py.js";
 import { pyProjectName } from "../scanner/manifest-py.js";
@@ -111,7 +112,8 @@ export async function verifyCapability(
         ? entry.name
         : null
       : await manifestName(dirAbs, entry.manifest);
-  if (declared !== entry.name) {
+  // Stored names are flattened to one line (unit-facts), so compare like for like.
+  if (declared === null || sanitiseModelText(declared, Number.POSITIVE_INFINITY) !== entry.name) {
     failed.push("manifest-name");
     details.push(
       `manifest declares "${declared ?? "no name"}", index recorded "${entry.name}"`,

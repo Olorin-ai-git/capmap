@@ -2,6 +2,7 @@ import type { Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { containedPath } from "./contained.js";
+import { PY_IDENTIFIER } from "./exports-py.js";
 import type { Candidate } from "./discover.js";
 import type { ParsedManifest } from "./manifest-npm.js";
 import { TEST_DIR_NAMES } from "./metrics.js";
@@ -77,7 +78,8 @@ export async function discoverSubpackages(
     const relRepo = repoRel(project, rel);
     if (stops.some((stop) => relRepo === stop || relRepo.startsWith(`${stop}/`))) return;
     // A test package exercises capabilities; it is never one to reuse.
-    if (TEST_DIR_NAMES.has(rel.split("/").pop() ?? rel)) return;
+    const name = rel.split("/").pop() ?? rel;
+    if (TEST_DIR_NAMES.has(name) || !PY_IDENTIFIER.test(name)) return;
     if ((await containedPath(project.absPath, `${rel}/${INIT_FILE}`)) === null) return;
     if (depth > 0 || manifest.entryRelPath !== `${rel}/${INIT_FILE}`) {
       out.push({
@@ -107,7 +109,10 @@ export async function discoverSubpackages(
       return;
     }
     const children = entries
-      .filter((entry) => entry.isDirectory() && !exclude.has(entry.name))
+      .filter(
+        (entry) =>
+          entry.isDirectory() && !exclude.has(entry.name) && PY_IDENTIFIER.test(entry.name),
+      )
       .map((entry) => entry.name)
       .sort();
     for (const child of children) {
