@@ -1,5 +1,6 @@
+import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   loadConfig,
@@ -36,6 +37,19 @@ export interface CommandDeps {
   logger: Logger;
   writer: Writer;
   model: ModelClient;
+  /** True only when a person can answer prompts; see operatorAtTerminal. */
+  operatorTerminal: boolean;
+}
+
+/**
+ * Variables Claude Code sets in every command it runs. A pseudo-terminal
+ * (`script -q /dev/null capmap gate … --resolve`) satisfies isTTY, so inside an
+ * agent session a terminal does not prove a person is answering.
+ */
+const AGENT_SESSION_ENV_VARS = ["CLAUDECODE", "CLAUDE_CODE_SESSION_ID"];
+
+export function operatorAtTerminal(env: NodeJS.ProcessEnv, stdinIsTTY: boolean): boolean {
+  return stdinIsTTY && AGENT_SESSION_ENV_VARS.every((name) => env[name] === undefined);
 }
 
 export const systemClock = (): Clock => ({ now: () => new Date() });
@@ -55,9 +69,61 @@ class DeferredAnthropicClient implements ModelClient {
   }
 }
 
+function workspaceRoot(): string {
+  return resolve(dirname(fileURLToPath(import.meta.url)), ...WORKSPACE_ROOT_HOPS);
+}
+
 function defaultConfigDir(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  return join(here, ...WORKSPACE_ROOT_HOPS, CONFIG_DIR_NAME);
+  return join(workspaceRoot(), CONFIG_DIR_NAME);
+}
+
+/**
+ * The path as the disk names it: symlinks resolved and, on a case-insensitive
+ * disk, the stored case. A path that does not exist yet keeps its missing tail
+ * under the canonical form of its nearest existing ancestor.
+ */
+function onDisk(pathAbs: string): string {
+  const tail: string[] = [];
+  let current = resolve(pathAbs);
+  for (;;) {
+    try {
+      return join(realpathSync.native(current), ...tail);
+    } catch {
+      const parent = dirname(current);
+      if (parent === current) return resolve(pathAbs);
+      tail.unshift(basename(current));
+      current = parent;
+    }
+  }
+}
+
+function isInside(parentAbs: string, childAbs: string): boolean {
+  const rel = relative(onDisk(parentAbs), onDisk(childAbs));
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+/**
+ * What capmap writes from an estate — its index, an eval result — describes
+ * that estate. When anything it reads lies outside this checkout (the estate
+ * root or any configured repository), the output must not be written into the
+ * checkout, where the next commit would publish it; only the bundled example
+ * estate is indexed in place. Paths are compared as the disk resolves them, so
+ * a symlink or a change of case cannot name the checkout as somewhere else.
+ */
+export function assertPlacement(targetAbs: string, config: LoadedConfig): void {
+  const checkout = workspaceRoot();
+  if (!isInside(checkout, targetAbs)) return;
+  const rootAbs = resolve(config.root);
+  const outside = [rootAbs, ...config.repos.repos.map((repo) => resolve(rootAbs, repo.path))].find(
+    (sourceAbs) => !isInside(checkout, sourceAbs),
+  );
+  if (outside === undefined) return;
+  throw new Error(
+    `refusing to write ${targetAbs}: it describes ${outside}, which is outside this ` +
+      `checkout, so it must be kept outside this checkout too. Point ` +
+      `${CONFIG_DIR_ENV_VAR} at a configuration directory outside the checkout, or ` +
+      `make "index.dir" in scan.config.json an absolute path outside it.`,
+  );
 }
 
 /** The index lives beside the configuration directory unless made absolute. */
@@ -74,15 +140,16 @@ export function packageVersion(): string {
 export async function buildDeps(env: NodeJS.ProcessEnv): Promise<CommandDeps> {
   const configDir = env[CONFIG_DIR_ENV_VAR] ?? defaultConfigDir();
   const config = await loadConfig({ configDir, env });
+  const indexDirAbs = resolve(resolveIndexDir(configDir, config.scan.index.dir));
+  assertPlacement(indexDirAbs, config);
   return {
     config,
-    store: new IndexStore({
-      indexDirAbs: resolveIndexDir(configDir, config.scan.index.dir),
-    }),
+    store: new IndexStore({ indexDirAbs }),
     git: new NodeGit(),
     clock: systemClock(),
     logger: new PinoLogger(env[LOG_LEVEL_ENV_VAR] ?? DEFAULT_LOG_LEVEL),
     writer: new StdoutWriter(),
     model: new DeferredAnthropicClient(env),
+    operatorTerminal: operatorAtTerminal(env, process.stdin.isTTY === true),
   };
 }

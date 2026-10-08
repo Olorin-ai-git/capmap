@@ -55,18 +55,22 @@ export function warnOutsideBand(
  *
  * A dry run writes nothing; an unavailable repository produced nothing to
  * describe; a repository with no stored sha, or without version control, has no
- * evidence either way and is enriched. `--force` overrides the gate.
+ * evidence either way and is enriched. So is one holding units no enrichment
+ * ever described (sub-packages a newer scanner finds at the same HEAD, or a
+ * `--no-enrich` scan): carrying cannot describe them, and the matcher would
+ * never see them. `--force` overrides the gate.
  */
 export function shouldEnrich(args: {
   opts: ScanOptions;
   available: boolean;
   headSha: string | null;
   previousSha: string | null;
+  unenrichedUnits: boolean;
 }): boolean {
   if (args.opts.enrich === false || args.opts.dryRun || !args.available) {
     return false;
   }
-  if (args.opts.force === true) return true;
+  if (args.opts.force === true || args.unenrichedUnits) return true;
   if (args.headSha === null || args.previousSha === null) return true;
   return args.headSha !== args.previousSha;
 }

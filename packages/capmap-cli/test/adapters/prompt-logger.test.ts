@@ -14,37 +14,24 @@ function capturing(): Writer & { lines: string[] } {
   };
 }
 
+/**
+ * Audit CM-2: off a terminal the prompt took option 1, so
+ * `capmap gate --resolve </dev/null` recorded "Operator accepted BUILD" for
+ * every unresolved component. It must refuse instead.
+ */
 describe("StdinPrompt without a terminal", () => {
-  it("prints the question and every option", async () => {
-    const writer = capturing();
-    const prompt = new StdinPrompt(writer, false);
-    await prompt.choose("pick one", ["first", "second"]);
-    prompt.close();
-
-    const output = writer.lines.join("\n");
-    expect(output).toContain("pick one");
-    expect(output).toContain("1) first");
-    expect(output).toContain("2) second");
-  });
-
-  it("takes the first option rather than blocking", async () => {
-    const writer = capturing();
-    const prompt = new StdinPrompt(writer, false);
-    const chosen = await prompt.choose("pick one", ["accept build", "recheck"]);
-    prompt.close();
-
-    // Option one is always the conservative answer — accept BUILD — so a gate
-    // run inside CI or a pipe neither hangs waiting for a human who is not
-    // there nor silently adopts a capability nobody chose.
-    expect(chosen).toBe(0);
-    expect(writer.lines.join("\n")).toMatch(/not a terminal/);
-  });
-
-  it("returns empty text rather than blocking", async () => {
+  it("refuses to choose rather than accepting BUILD for the operator", async () => {
     const prompt = new StdinPrompt(capturing(), false);
-    const answer = await prompt.text("capability id");
+    await expect(
+      prompt.choose("pick one", ["accept build", "recheck"]),
+    ).rejects.toThrow(/interactive terminal/);
     prompt.close();
-    expect(answer).toBe("");
+  });
+
+  it("refuses to read text", async () => {
+    const prompt = new StdinPrompt(capturing(), false);
+    await expect(prompt.text("capability id")).rejects.toThrow(/interactive terminal/);
+    prompt.close();
   });
 });
 

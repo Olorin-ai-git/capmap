@@ -18,6 +18,13 @@ const OPTIONS = [
 
 const UNRESOLVED = "UNRESOLVED";
 
+/**
+ * Failed checks meaning the component was never compared against the estate. Accepting
+ * BUILD for one of these would turn a matcher outage into permission to rebuild, so only
+ * a fresh gate run or a named capability can clear it.
+ */
+const NEVER_MATCHED = new Set(["matcher-unavailable", "matcher-unanswered"]);
+
 export interface ResolveInteractiveArgs {
   record: GateRecord;
   repos: RepoIndex[];
@@ -89,7 +96,6 @@ async function reconsider(
     score,
     tier: located.tier,
     verified: verification.ok,
-    isMinor: located.isMinor,
     thresholds: args.thresholds,
   });
   const resolved = verdict !== "BUILD" && verdict !== "UNRESOLVED";
@@ -121,10 +127,14 @@ async function resolveOne(
     OPTIONS,
   );
 
-  if (choice === CHOICE_BUILD) return asBuild(component);
+  if (choice === CHOICE_BUILD) {
+    const neverMatched = component.failedChecks.some((c) => NEVER_MATCHED.has(c));
+    return neverMatched ? component : asBuild(component);
+  }
 
   if (choice === CHOICE_RECHECK) {
-    if (component.bestCandidate === null) return asBuild(component);
+    // Nothing to re-check is not a decision: the component stays unresolved.
+    if (component.bestCandidate === null) return component;
     return reconsider(component, component.bestCandidate, args, false);
   }
 

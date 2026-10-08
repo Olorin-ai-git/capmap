@@ -1,3 +1,5 @@
+import { UNTRUSTED_NOTICE } from "../enrich/untrusted.js";
+
 /**
  * System prompts for the two matching calls. Kept apart from the matcher so
  * that wording can be revised without touching parsing or validation logic.
@@ -6,8 +8,9 @@ export const SELECT_SYSTEM_PROMPT = [
   "You shortlist existing capability domains that could satisfy each component of a new",
   "specification. Reply with JSON only:",
   '{"selections":[{"component":string,"domains":string[]}]}.',
-  "Use only domain ids from the supplied catalogue. Omit a component entirely when nothing",
-  "in the catalogue is plausibly related.",
+  "Use only domain ids from the supplied catalogue. Answer for EVERY component, spelled",
+  "exactly as given; when nothing in the catalogue is plausibly related, give it an empty",
+  "domains list. An omitted component is treated as unanswered and blocks the gate.",
   "When SEVERAL repositories appear to implement the same capability, list ALL of them,",
   "up to the limit. Do not pick a favourite here — ranking happens later, and a repository",
   "you leave out cannot be ranked at all. Two teams having independently built the same",
@@ -18,6 +21,7 @@ export const SELECT_SYSTEM_PROMPT = [
   "those, include EVERY such platform domain you can see, from every repository, even",
   "where a purpose-built service also exists — the point is to reveal that the capability",
   "was built more than once, not to choose between them.",
+  UNTRUSTED_NOTICE,
 ].join(" ");
 
 export const RANK_SYSTEM_PROMPT = [
@@ -37,4 +41,5 @@ export const RANK_SYSTEM_PROMPT = [
   "having independently built the same capability is the single most useful thing you can",
   "surface, and reporting only a winner would hide it.",
   "Every packageId must come from the supplied candidates. Each rationale is one sentence.",
+  UNTRUSTED_NOTICE,
 ].join(" ");

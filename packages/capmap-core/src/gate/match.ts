@@ -1,6 +1,8 @@
 import type { ScanConfig } from "../config/schema.js";
 import type { PackageEntry, RepoIndex } from "../model/index-schema.js";
 import type { Logger, ModelClient } from "../ports/index.js";
+import { normaliseComponents } from "./components.js";
+import { sanitiseModelText } from "../enrich/untrusted.js";
 import {
   RANK_SYSTEM_PROMPT,
   SELECT_SYSTEM_PROMPT,
@@ -9,12 +11,10 @@ import {
   RankingsSchema,
   SelectionSchema,
   extractJson,
+  renderCandidates,
   renderCatalogue,
   type PackageRanking,
 } from "./match-parse.js";
-
-/** Number of a package's exported symbols shown to the ranker. Purely a prompt-shaping slice. */
-const EXPORTS_SHOWN = 12;
 
 export interface SelectCandidatesArgs {
   components: string[];
@@ -30,20 +30,28 @@ export interface SelectCandidatesArgs {
  * One model call shortlists domains for every component at once. Domain ids the model
  * invents are dropped, and components the model invents are ignored, so the returned map
  * always has exactly the requested components as its keys.
+ *
+ * A component the model did not answer for maps to null, never to an empty shortlist: an
+ * omission or a re-spelling is not the model saying "nothing exists", and reading it that
+ * way turned every unanswered component into a silent BUILD. Echoes are matched after
+ * the same normalisation the components were given. Only an explicit empty list means
+ * nothing in the catalogue is related.
  */
 export async function selectCandidateDomains(
   args: SelectCandidatesArgs,
-): Promise<Map<string, string[]> | null> {
-  const result = new Map<string, string[]>(args.components.map((c) => [c, []]));
+): Promise<Map<string, string[] | null> | null> {
+  const result = new Map<string, string[] | null>(
+    args.components.map((c) => [c, null]),
+  );
   if (result.size === 0) return result;
 
   const known = new Set(args.repos.flatMap((r) => r.domains.map((d) => d.id)));
 
   // A thrown call is treated as an unusable answer rather than propagated. The
   // model is a remote service that rate-limits and has outages; when it is
-  // unavailable every component should fall through to BUILD with an empty
-  // shortlist, which is honest, instead of the gate dying and blocking the
-  // operator behind an error that has nothing to do with their specification.
+  // unavailable every component is reported UNRESOLVED (matcher-unavailable),
+  // which blocks without the gate dying on an error that has nothing to do
+  // with the specification.
   let raw: string;
   try {
     raw = await args.model.complete({
@@ -54,7 +62,6 @@ export async function selectCandidateDomains(
         `Return at most ${args.config.maxCandidates} domains per component.`,
       ].join("\n\n"),
       model: args.config.model,
-      effort: args.config.effort,
       maxTokens: args.maxTokens,
     });
   } catch (error) {
@@ -76,11 +83,14 @@ export async function selectCandidateDomains(
   }
 
   for (const selection of parsed.data.selections) {
-    if (!result.has(selection.component)) continue;
+    const [component] = normaliseComponents([selection.component]);
+    if (component === undefined || !result.has(component)) continue;
     const domains = [
       ...new Set(selection.domains.filter((id) => known.has(id))),
     ].slice(0, args.config.maxCandidates);
-    result.set(selection.component, domains);
+    // Every domain named was invented: the answer carries nothing usable.
+    const invented = domains.length === 0 && selection.domains.length > 0;
+    result.set(component, invented ? null : domains);
   }
   return result;
 }
@@ -94,16 +104,6 @@ export interface RankArgs {
   maxRetries: number;
   /** Response ceiling for each ranking call, supplied by the caller from configuration. */
   maxTokens: number;
-}
-
-function renderCandidates(candidates: PackageEntry[]): string {
-  return candidates
-    .map(
-      (p) =>
-        `- ${p.id} [${p.kind}, ${p.maturity}] ${p.name}: ${p.summary ?? "no summary available"}` +
-        ` (exports: ${p.exports.slice(0, EXPORTS_SHOWN).join(", ")})`,
-    )
-    .join("\n");
 }
 
 /**
@@ -139,7 +139,6 @@ export async function rankPackagesForComponent(
         system: RANK_SYSTEM_PROMPT,
         user,
         model: args.config.model,
-        effort: args.config.effort,
         maxTokens: args.maxTokens,
       });
     } catch (error) {
@@ -164,7 +163,12 @@ export async function rankPackagesForComponent(
           seen.add(ranking.packageId);
           return true;
         })
-        .sort((a, b) => b.score - a.score || a.packageId.localeCompare(b.packageId));
+        .sort((a, b) => b.score - a.score || a.packageId.localeCompare(b.packageId))
+        // Rationales are printed in gate output and stored in the record.
+        .map((ranking) => ({
+          ...ranking,
+          rationale: sanitiseModelText(ranking.rationale, args.config.maxRationaleChars),
+        }));
       if (kept.length > 0) return kept;
     }
     args.logger.warn("package ranking produced an unusable result", {

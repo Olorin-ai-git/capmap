@@ -1,0 +1,10 @@
+{
+  "cases": [
+    { "component": "session authentication", "expected": "REUSE", "target": "alpha/auth", "note": "alpha/auth and beta/auth both exist; the core one is reused" },
+    { "component": "hosted checkout billing", "expected": "REUSE", "target": "alpha/billing", "note": "alpha/billing and beta/billing duplicate each other" },
+    { "component": "transactional email", "expected": "REUSE", "target": "alpha/email", "note": "alpha/email and beta/email duplicate each other" },
+    { "component": "ui kit", "expected": "REUSE", "target": "alpha/ui-kit" },
+    { "component": "vendor ledger parsing", "expected": "REFERENCE", "target": "vendor-toolkit/vendor-toolkit", "note": "external tier: read, never imported" },
+    { "component": "rocket telemetry", "expected": "BUILD", "target": null, "note": "nothing in the estate does this" }
+  ]
+}

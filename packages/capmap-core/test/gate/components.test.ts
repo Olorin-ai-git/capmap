@@ -111,6 +111,7 @@ describe("gate record schema", () => {
     specPath: "docs/specs/x.md",
     feature: "tenant-portal",
     componentsHash: hashComponents(["billing", "holography"]),
+    specContentHash: `sha256:${"b".repeat(64)}`,
     componentsSource: "document",
     generatedAt: "2026-08-02T00:00:00.000Z",
     indexGeneratedAt: "2026-07-27T00:00:00.000Z",

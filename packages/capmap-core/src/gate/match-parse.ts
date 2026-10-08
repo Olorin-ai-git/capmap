@@ -1,5 +1,6 @@
 import { z } from "zod";
-import type { RepoIndex } from "../model/index-schema.js";
+import type { PackageEntry, RepoIndex } from "../model/index-schema.js";
+import { fence } from "../enrich/untrusted.js";
 
 /**
  * Response shapes for the two matching calls, the tolerant JSON reader that
@@ -62,6 +63,10 @@ export function extractJson(raw: string): unknown {
  * shortlisting auditable — you can read exactly what the model was shown.
  */
 export function renderCatalogue(repos: RepoIndex[]): string {
+  return fence("CATALOGUE", renderCatalogueLines(repos));
+}
+
+function renderCatalogueLines(repos: RepoIndex[]): string {
   return repos
     .flatMap((repo) =>
       repo.domains.map(
@@ -71,6 +76,24 @@ export function renderCatalogue(repos: RepoIndex[]): string {
           ` (tags: ${domain.domainTags.join(", ")}; ` +
           `stack: ${domain.stack.join(", ")})`,
       ),
+    )
+    .join("\n");
+}
+
+/** Number of a package's exported symbols shown to the ranker. Purely a prompt-shaping slice. */
+const EXPORTS_SHOWN = 12;
+
+/** The ranker's candidates, fenced: their text comes from scanned repositories. */
+export function renderCandidates(candidates: PackageEntry[]): string {
+  return fence("CANDIDATES", renderCandidateLines(candidates));
+}
+
+function renderCandidateLines(candidates: PackageEntry[]): string {
+  return candidates
+    .map(
+      (p) =>
+        `- ${p.id} [${p.kind}, ${p.maturity}] ${p.name}: ${p.summary ?? "no summary available"}` +
+        ` (exports: ${p.exports.slice(0, EXPORTS_SHOWN).join(", ")})`,
     )
     .join("\n");
 }

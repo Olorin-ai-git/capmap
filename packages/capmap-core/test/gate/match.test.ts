@@ -12,9 +12,9 @@ import {
 const CFG = {
   maxCandidates: 5,
   model: "m",
-  effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
+  maxRationaleChars: 400,
 };
 const SELECT_TOKENS = 2048;
 const RANK_TOKENS = 512;
@@ -90,7 +90,7 @@ describe("selectCandidateDomains", () => {
     expect(model.calls).toBe(1);
   });
 
-  it("passes the model, effort and token budget through to the request", async () => {
+  it("passes the model and token budget through to the request", async () => {
     const seen: unknown[] = [];
     const model = {
       calls: 0,
@@ -109,7 +109,6 @@ describe("selectCandidateDomains", () => {
     });
     expect(seen[0]).toMatchObject({
       model: "m",
-      effort: "high",
       maxTokens: SELECT_TOKENS,
     });
   });
@@ -234,7 +233,7 @@ describe("selectCandidateDomains", () => {
     expect(result?.get("billing")).toHaveLength(1);
   });
 
-  it("yields an empty shortlist for a component the model omitted", async () => {
+  it("yields null, not an empty shortlist, for a component the model omitted (CM-3)", async () => {
     const model = scriptedModel([JSON.stringify({ selections: [] })]);
     const result = await selectCandidateDomains({
       components: ["holography"],
@@ -244,7 +243,7 @@ describe("selectCandidateDomains", () => {
       logger: silentLogger(),
       maxTokens: SELECT_TOKENS,
     });
-    expect(result?.get("holography")).toEqual([]);
+    expect(result?.get("holography")).toBeNull();
   });
 
   it("reports unavailable and warns when the model returns unusable output", async () => {

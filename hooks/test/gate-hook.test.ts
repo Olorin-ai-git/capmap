@@ -1,9 +1,10 @@
 import { describe, it, expect, afterAll, beforeAll } from "vitest";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile, access } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, access, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { specContentHash } from "../src/components-hash.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const HOOK = join(here, "..", "dist", "gate-hook.js");
@@ -52,11 +53,14 @@ function invoke(filePath: string, env: NodeJS.ProcessEnv): Promise<Invocation> {
 
 const HASH_OF_BILLING_ONLY = "sha256:f8ecc289bb90f63f1ceebbec31147ecc8b97d98014f0f8a39d258ec6d816e2f3";
 
+const SPEC_FILE = join("specs", "2026-08-02-tenant-portal-design.md");
+const SPEC_TEXT = "# Spec\n\n## Components\n\n- billing\n";
+
 const RESOLVED_RECORD = {
-  schemaVersion: 1,
-  specPath: "specs/x.md",
+  schemaVersion: 2,
   feature: "tenant-portal",
-  componentsHash: `sha256:${"a".repeat(64)}`,
+  componentsHash: HASH_OF_BILLING_ONLY,
+  componentsSource: "document",
   generatedAt: "2026-08-02T00:00:00.000Z",
   indexGeneratedAt: "2026-07-27T00:00:00.000Z",
   staleRepos: [] as string[],
@@ -82,9 +86,11 @@ async function scenario(): Promise<{ root: string; env: NodeJS.ProcessEnv }> {
   await mkdir(join(root, "plans"), { recursive: true });
   await writeFile(
     join(root, "plans", "2026-08-02-tenant-portal.md"),
-    "# Plan\n",
+    `# Plan\n\nSpec: ${SPEC_FILE}\n`,
   );
   await writeFile(join(root, "README.md"), "# readme\n");
+  await mkdir(join(root, "specs"), { recursive: true });
+  await writeFile(join(root, SPEC_FILE), SPEC_TEXT);
 
   const configRoot = await mkdtemp(join(tmpdir(), "capmap-hookcfg-"));
   scratch.push(configRoot);
@@ -94,25 +100,42 @@ async function scenario(): Promise<{ root: string; env: NodeJS.ProcessEnv }> {
     join(configRoot, "config", "scan.config.json"),
     JSON.stringify({
       hook: {
-        specGlobs: ["**/specs/**"],
-        planGlobs: ["**/plans/**"],
+        specGlobs: ["**/specs/**/*.{md,markdown}"],
+        planGlobs: ["**/plans/**/*.{md,markdown}"],
+        exemptGlobs: [],
+        deadlineMs: 5000,
+        maxShellWords: 4096,
+        maxShellPaths: 10000,
       },
       index: { dir: "index" },
     }),
   );
   await writeFile(
     join(configRoot, "index", "index.json"),
-    JSON.stringify({ schemaVersion: 1 }),
+    JSON.stringify({ schemaVersion: 1, generatedAt: RESOLVED_RECORD.indexGeneratedAt }),
   );
 
   return { root, env: { CAPMAP_CONFIG_DIR: join(configRoot, "config") } };
 }
 
-async function writeRecord(root: string, record: unknown): Promise<void> {
+/**
+ * Write a record as `capmap gate` would: bound to the scenario's specification
+ * by path and by the content currently on disk. Fields in `record` win.
+ */
+async function writeRecord(root: string, record: object): Promise<void> {
+  const specPath = join(root, SPEC_FILE);
   await mkdir(join(root, ".capmap"), { recursive: true });
   await writeFile(
     join(root, ".capmap", "gate-tenant-portal.json"),
-    JSON.stringify(record, null, 2),
+    JSON.stringify(
+      {
+        specPath,
+        specContentHash: specContentHash(await readFile(specPath, "utf8")),
+        ...record,
+      },
+      null,
+      2,
+    ),
   );
 }
 
@@ -178,6 +201,12 @@ describe("gate hook end to end", () => {
       env,
     );
     expect(result.stderr).not.toMatch(/--resolve/);
+  });
+
+  it("gates a plan whose extension differs in case (SP-3 audit)", async () => {
+    const { root, env } = await scenario();
+    const result = await invoke(join(root, "plans", "2026-08-02-other.MD"), env);
+    expect(result.code).toBe(EXIT_BLOCK);
   });
 
   it("leaves a file outside the configured globs alone", async () => {
@@ -273,8 +302,8 @@ describe("component changes in the pending write", () => {
     // was allowed for every guarded path rather than for specifications only.
     const { root, env } = await scenario();
     const result = await invokeWithContent(
-      join(root, "plans", "2099-01-01-ungated.md"),
-      "# Plan\n\nBuild all of it from scratch.\n",
+      join(root, "plans", "2099-01-01-tenant-portal.md"),
+      `# Plan\n\nSpec: ${SPEC_FILE}\n\nBuild all of it from scratch.\n`,
       env,
     );
     expect(result.code).toBe(EXIT_BLOCK);
@@ -440,5 +469,164 @@ describe("removal of the gated component list", () => {
     const { path, env } = await gatedFrom("flags");
     const result = await writeContent(path, "# Spec\n\nAll prose now.\n", env);
     expect(result.code).toBe(0);
+  });
+});
+
+/**
+ * SP-3 audit round 3, with the globs this repository ships. A spec-kit feature
+ * folder holds one specification (`spec.md`) and the documents that implement
+ * it. Linking them to one gate record made every sibling look like the
+ * specification with its component list deleted, so `/speckit.plan` could not
+ * write `plan.md` after gating; and since none matched a plan glob, before
+ * gating the whole plan could be written ungated. Plans of any format under
+ * `plans/` fail closed, as before the globs were narrowed to Markdown.
+ */
+describe("spec-kit feature folders and plan formats (shipped globs)", () => {
+  const SPEC_KIT_SPEC = "# Spec\n\n## Components\n\n- billing\n";
+
+  async function shipped(): Promise<{ root: string; env: NodeJS.ProcessEnv }> {
+    const { root, env } = await scenario();
+    const shippedHook = (JSON.parse(
+      await readFile(join(here, "..", "..", "config", "scan.config.json"), "utf8"),
+    ) as { hook: unknown }).hook;
+    const configFile = join(env["CAPMAP_CONFIG_DIR"] ?? "", "scan.config.json");
+    await writeFile(configFile, JSON.stringify({ hook: shippedHook, index: { dir: "index" } }));
+    const feature = join(root, "specs", "029-tenant-portal");
+    await mkdir(join(feature, "checklists"), { recursive: true });
+    await writeFile(join(feature, "spec.md"), SPEC_KIT_SPEC);
+    return { root, env };
+  }
+
+  async function gate(root: string): Promise<void> {
+    await mkdir(join(root, ".capmap"), { recursive: true });
+    await writeFile(
+      join(root, ".capmap", "gate-029-tenant-portal.json"),
+      JSON.stringify({
+        ...RESOLVED_RECORD,
+        feature: "029-tenant-portal",
+        specPath: join(root, "specs", "029-tenant-portal", "spec.md"),
+        specContentHash: specContentHash(SPEC_KIT_SPEC),
+        componentsHash: HASH_OF_BILLING_ONLY,
+        componentsSource: "document",
+      }),
+    );
+  }
+
+  const siblings = [
+    "plan.md",
+    "tasks.md",
+    "research.md",
+    "data-model.md",
+    "quickstart.md",
+    "contracts/api.md",
+  ];
+
+  it("allows every implementing document once spec.md is gated", async () => {
+    const { root, env } = await shipped();
+    await gate(root);
+    const feature = join(root, "specs", "029-tenant-portal");
+    expect((await invoke(join(feature, "spec.md"), env)).code).toBe(0);
+    for (const name of siblings) {
+      const result = await invoke(join(feature, name), env);
+      expect({ name, ...result }).toMatchObject({ name, code: 0 });
+    }
+  });
+
+  it("blocks every implementing document before spec.md is gated", async () => {
+    const { root, env } = await shipped();
+    const feature = join(root, "specs", "029-tenant-portal");
+    for (const name of siblings) {
+      const result = await invoke(join(feature, name), env);
+      expect({ name, code: result.code }).toEqual({ name, code: EXIT_BLOCK });
+      expect(result.stderr).toMatch(/plan may not be written before/i);
+    }
+  });
+
+  it("still lets a new spec.md and its quality checklist be written ungated", async () => {
+    const { root, env } = await shipped();
+    const feature = join(root, "specs", "030-next");
+    expect((await invoke(join(feature, "spec.md"), env)).code).toBe(0);
+    expect((await invoke(join(feature, "checklists", "requirements.md"), env)).code).toBe(0);
+  });
+
+  it("fails closed for a plan under plans/ whatever its format", async () => {
+    const { root, env } = await shipped();
+    for (const name of ["2026-10-07-x.txt", "2026-10-07-x.rst", "2026-10-07-x.mdx", "2026-10-07-x"]) {
+      const result = await invoke(join(root, "docs", "superpowers", "plans", name), env);
+      expect({ name, code: result.code }).toEqual({ name, code: EXIT_BLOCK });
+    }
+  });
+
+  it("leaves a non-Markdown file directly under specs/ alone (CM-10)", async () => {
+    const { root, env } = await shipped();
+    expect((await invoke(join(root, "specs", "openapi.yaml"), env)).code).toBe(0);
+  });
+});
+
+/**
+ * SP-3 audit rounds 4 and 5: the hook classified the path exactly as given and
+ * against every absolute ancestor. A dot-directory segment (an agent's
+ * `.claude/worktrees/` checkout), a `..` segment, or a numbered folder under a
+ * `specs/` directory ABOVE the repository changed what the globs saw, so plans
+ * were written ungated and ordinary code in a spec-kit folder was blocked.
+ */
+describe("path forms the gate must see the same way (SP-3 audit)", () => {
+  async function shipped(): Promise<{ root: string; env: NodeJS.ProcessEnv }> {
+    const { root, env } = await scenario();
+    const shippedHook = (JSON.parse(
+      await readFile(join(here, "..", "..", "config", "scan.config.json"), "utf8"),
+    ) as { hook: unknown }).hook;
+    const configFile = join(env["CAPMAP_CONFIG_DIR"] ?? "", "scan.config.json");
+    await writeFile(configFile, JSON.stringify({ hook: shippedHook, index: { dir: "index" } }));
+    return { root, env };
+  }
+
+  it("gates plans in an agent worktree under a dot-directory", async () => {
+    const { root, env } = await shipped();
+    const worktree = join(root, ".claude", "worktrees", "agent-1");
+    await mkdir(worktree, { recursive: true });
+    await writeFile(join(worktree, ".git"), "gitdir: elsewhere\n");
+    for (const path of [
+      join(worktree, "docs", "superpowers", "plans", "2026-10-07-x.md"),
+      join(worktree, "specs", "029-x", "plan.md"),
+      join(root, ".config", "plans", "2026-10-07-x.md"),
+      join(root, "docs", "superpowers", "plans", ".x.md"),
+    ]) {
+      expect({ path, code: (await invoke(path, env)).code }).toEqual({ path, code: EXIT_BLOCK });
+    }
+  });
+
+  it("gates a plan named through a .. segment", async () => {
+    const { root, env } = await shipped();
+    for (const path of [
+      join(root, "specs", "029-x", "checklists") + "/../plan.md",
+      join(root, "src") + "/../docs/superpowers/plans/x.md",
+    ]) {
+      expect({ path, code: (await invoke(path, env)).code }).toEqual({ path, code: EXIT_BLOCK });
+    }
+  });
+
+  it("leaves code and data files in a spec-kit folder alone (CM-10)", async () => {
+    const { root, env } = await shipped();
+    const feature = join(root, "specs", "004-portal");
+    await mkdir(join(feature, "contracts"), { recursive: true });
+    for (const name of ["contracts/openapi.yaml", "package.json", "frontend-components.ts"]) {
+      await writeFile(join(feature, name), "x\n");
+      expect({ name, code: (await invoke(join(feature, name), env)).code }).toEqual({ name, code: 0 });
+    }
+  });
+
+  it("reads only the path inside the repository, not the folders above it", async () => {
+    const { env } = await shipped();
+    const outer = await mkdtemp(join(tmpdir(), "capmap-outer-"));
+    scratch.push(outer);
+    const repo = join(outer, "specs", "100-acme", "repo");
+    await mkdir(join(repo, ".git"), { recursive: true });
+    await mkdir(join(repo, "src"), { recursive: true });
+    await writeFile(join(repo, "README.md"), "# readme\n");
+    await writeFile(join(repo, "src", "index.ts"), "x\n");
+    expect((await invoke(join(repo, "README.md"), env)).code).toBe(0);
+    expect((await invoke(join(repo, "src", "index.ts"), env)).code).toBe(0);
+    expect((await invoke(join(repo, "plans", "2026-10-07-x.md"), env)).code).toBe(EXIT_BLOCK);
   });
 });

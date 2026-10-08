@@ -5,7 +5,8 @@ import { assignUnitIds } from "./unit-id.js";
 import { parseNpmManifest, type ParsedManifest } from "./manifest-npm.js";
 import { parsePyManifest } from "./manifest-py.js";
 import { extractTsExports, type ExportResult } from "./exports-ts.js";
-import { extractPyExports } from "./exports-py.js";
+import { extractPyPackageExports } from "./exports-py.js";
+import { discoverSubpackages } from "./subpackages.js";
 
 /** A discovered manifest directory paired with its parsed manifest and stable id. */
 export interface Unit {
@@ -21,10 +22,12 @@ export interface BuildUnitsArgs {
   excludePaths: string[];
   /** Repository-relative paths of configured repositories nested inside this one. */
   nestedRepoPaths?: string[];
+  python: { subpackageMaxDepth: number };
 }
 
 const NPM_MANIFEST_FILE = "package.json";
-const PY_PACKAGE_KIND = "py-package";
+const SUBPACKAGE_KIND = "py-subpackage";
+const PY_KINDS: ReadonlySet<string> = new Set(["py-package", SUBPACKAGE_KIND]);
 const PATH_SEPARATOR = "/";
 /** A candidate at the repository root carries the relative path `.`. */
 const REPO_ROOT_REL_PATH = ".";
@@ -59,10 +62,11 @@ export function unitPath(repoPath: string, relPath: string): string {
 async function parseCandidate(
   candidate: Candidate,
   internalScopes: string[],
+  excludePaths: string[],
 ): Promise<ParsedManifest> {
   return candidate.manifestFile === NPM_MANIFEST_FILE
     ? parseNpmManifest(candidate.absPath, internalScopes)
-    : parsePyManifest(candidate.absPath, internalScopes);
+    : parsePyManifest(candidate.absPath, internalScopes, excludePaths);
 }
 
 /**
@@ -76,8 +80,8 @@ export async function extractExports(unit: Unit): Promise<ExportResult> {
     return { exports: [], extractionFailed: manifest.parseError === null };
   }
   const entryAbs = join(candidate.absPath, manifest.entryRelPath);
-  return manifest.kind === PY_PACKAGE_KIND
-    ? extractPyExports(entryAbs)
+  return PY_KINDS.has(manifest.kind)
+    ? extractPyPackageExports(entryAbs)
     : extractTsExports(entryAbs);
 }
 
@@ -89,21 +93,55 @@ export async function buildUnits(args: BuildUnitsArgs): Promise<Unit[]> {
     excludePaths: args.excludePaths,
     nestedRepoPaths: args.nestedRepoPaths ?? [],
   });
-  // Ids are assigned across the whole repository at once, because uniqueness is
-  // a property of the set rather than of any single unit.
-  const ids = assignUnitIds(
-    args.repo.id,
-    candidates.map((candidate) => candidate.relPath),
-  );
-
-  const units: Unit[] = [];
+  const parsed: Array<Omit<Unit, "id">> = [];
   for (const candidate of candidates) {
-    const manifest = await parseCandidate(candidate, args.internalScopes);
-    units.push({
+    parsed.push({
       candidate,
-      manifest,
-      id: ids.get(candidate.relPath) ?? unitId(args.repo.id, candidate, manifest),
+      manifest: await parseCandidate(candidate, args.internalScopes, args.excludePaths),
     });
   }
-  return units;
+  const stopRelPaths = new Set([
+    ...candidates.map((candidate) => candidate.relPath),
+    ...(args.nestedRepoPaths ?? []),
+  ]);
+  for (const project of [...parsed]) {
+    if (project.manifest.importRoots.length === 0) continue;
+    const found = await discoverSubpackages({
+      project: project.candidate,
+      manifest: project.manifest,
+      maxDepth: args.python.subpackageMaxDepth,
+      excludePaths: args.excludePaths,
+      stopRelPaths,
+    });
+    project.manifest = {
+      ...project.manifest,
+      deps: {
+        ...project.manifest.deps,
+        internal: [...new Set([...project.manifest.deps.internal, ...found.projectImports])].sort(),
+      },
+    };
+    parsed.push(...found.subpackages);
+  }
+  parsed.sort((a, b) => a.candidate.relPath.localeCompare(b.candidate.relPath));
+
+  // Ids are assigned across the whole repository at once, because uniqueness is
+  // a property of the set rather than of any single unit. Manifest packages go
+  // first so a sub-package never takes an id a manifest package already held.
+  const relPathsOf = (sub: boolean): string[] =>
+    parsed
+      .filter((unit) => (unit.manifest.kind === SUBPACKAGE_KIND) === sub)
+      .map((unit) => unit.candidate.relPath);
+  const manifestIds = assignUnitIds(args.repo.id, relPathsOf(false));
+  const subIds = assignUnitIds(
+    args.repo.id,
+    relPathsOf(true),
+    new Set(manifestIds.values()),
+  );
+  return parsed.map((unit) => ({
+    ...unit,
+    id:
+      manifestIds.get(unit.candidate.relPath) ??
+      subIds.get(unit.candidate.relPath) ??
+      unitId(args.repo.id, unit.candidate, unit.manifest),
+  }));
 }

@@ -37,12 +37,13 @@ const RATE_LIMIT = "429 rate limit exceeded";
 const NOW = new Date("2026-08-02T00:00:00.000Z");
 const ENRICH_CONFIG = {
   model: "m",
-  effort: "medium",
   maxRetries: 2,
   concurrency: 2,
   packageMaxTokens: 512,
   domainMaxTokens: 4096,
   maxPackagesPerDomainCall: 25,
+  maxExcerptChars: 4000,
+  maxSummaryChars: 600,
 };
 
 const entry: PackageEntry = {
@@ -163,9 +164,9 @@ describe("the gate survives a refusing model", () => {
       config: {
   maxCandidates: 5,
   model: "m",
-  effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
+  maxRationaleChars: 400,
 },
       logger: silentLogger(),
       maxTokens: 2048,
@@ -183,9 +184,9 @@ describe("the gate survives a refusing model", () => {
       config: {
   maxCandidates: 5,
   model: "m",
-  effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
+  maxRationaleChars: 400,
 },
       logger: silentLogger(),
       maxRetries: 1,
@@ -197,6 +198,7 @@ describe("the gate survives a refusing model", () => {
   it("blocks with UNRESOLVED when the model is down, never BUILD", async () => {
     const record = await runGate({
       specPath: "docs/specs/2026-08-02-x-design.md",
+      specText: null,
       componentsSource: "document" as const,
       components: ["billing", "auth"],
       repos: [repoIndex],
@@ -216,9 +218,9 @@ describe("the gate survives a refusing model", () => {
       matching: {
   maxCandidates: 5,
   model: "m",
-  effort: "high",
   selectMaxTokens: 4096,
   rankMaxTokens: 1024,
+  maxRationaleChars: 400,
 },
       selectMaxTokens: 2048,
       rankMaxTokens: 512,

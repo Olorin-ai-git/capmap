@@ -7,22 +7,9 @@ import type { PackageEntry, RepoIndex } from "../model/index-schema.js";
 import { verifyCapability } from "../verify/verify.js";
 import type { PackageRanking } from "./match-parse.js";
 import { applyVerdict } from "./verdict.js";
+import { locate, pickWinner } from "./winner.js";
 
-interface Located {
-  entry: PackageEntry;
-  tier: RepoIndex["tier"];
-  isMinor: boolean;
-}
-
-export function locate(repos: RepoIndex[], packageId: string): Located | null {
-  for (const repo of repos) {
-    const entry = repo.packages.find((candidate) => candidate.id === packageId);
-    if (entry !== undefined) {
-      return { entry, tier: repo.tier, isMinor: false };
-    }
-  }
-  return null;
-}
+export { locate };
 
 /** Every package belonging to any of the shortlisted domains. */
 export function packagesForDomains(
@@ -127,7 +114,7 @@ export async function resolveComponent(
     };
   }
 
-  const winner = args.rankings[0];
+  const winner = pickWinner(args.rankings, args.repos, args.thresholds);
   if (winner === undefined) {
     return {
       name: args.component,
@@ -172,7 +159,6 @@ export async function resolveComponent(
     score: winner.score,
     tier: located.tier,
     verified: verification.ok,
-    isMinor: located.isMinor,
     thresholds: args.thresholds,
   });
   const resolved = verdict !== "BUILD" && verdict !== "UNRESOLVED";

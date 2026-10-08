@@ -3,13 +3,16 @@ import type { Prompt, Writer } from "@capmap/core";
 
 const FIRST_OPTION = 1;
 
+/** Returned when no valid choice was made; it selects no option. */
+export const NO_CHOICE = -1;
+
 /**
  * Reads operator choices from stdin.
  *
- * Falls back to the first option — always "accept BUILD", the conservative
- * answer — when stdin is not a terminal. A gate run inside CI or a pipe must
- * not hang waiting for a human who is not there, and must not silently adopt a
- * capability nobody chose.
+ * Refuses to answer when stdin is not a terminal. Defaulting to option 1 there
+ * turned `gate --resolve </dev/null` into "the operator accepted BUILD" for
+ * every unresolved component: a pipe or an agent is not an operator. An answer
+ * that is not a listed option selects nothing rather than option 1.
  */
 export class StdinPrompt implements Prompt {
   private readonly rl: Interface;
@@ -22,24 +25,29 @@ export class StdinPrompt implements Prompt {
   }
 
   async choose(question: string, options: string[]): Promise<number> {
+    this.requireTerminal();
     this.writer.line(question);
     options.forEach((option, index) => {
       this.writer.line(`  ${String(index + FIRST_OPTION)}) ${option}`);
     });
-    if (!this.interactive) {
-      this.writer.line("  (not a terminal — taking option 1)");
-      return 0;
-    }
     const answer = await this.rl.question(`select 1-${options.length}: `);
     const chosen = Number(answer.trim()) - FIRST_OPTION;
     return Number.isInteger(chosen) && chosen >= 0 && chosen < options.length
       ? chosen
-      : 0;
+      : NO_CHOICE;
   }
 
   async text(question: string): Promise<string> {
-    if (!this.interactive) return "";
+    this.requireTerminal();
     return this.rl.question(`${question}: `);
+  }
+
+  private requireTerminal(): void {
+    if (!this.interactive) {
+      throw new Error(
+        "resolving needs an operator at an interactive terminal; stdin is not one",
+      );
+    }
   }
 
   close(): void {

@@ -3,7 +3,8 @@ import { readdir } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type { RepoEntry } from "../config/schema.js";
 
-export type ManifestFile = "package.json" | "pyproject.toml";
+/** `__init__.py` marks a Python sub-package found inside a project, not by this walk. */
+export type ManifestFile = "package.json" | "pyproject.toml" | "__init__.py";
 
 export interface Candidate {
   repoId: string;

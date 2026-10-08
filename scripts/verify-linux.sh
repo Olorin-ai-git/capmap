@@ -26,7 +26,10 @@ case "$(uname -m)" in
 esac
 PLATFORM="${CAPMAP_LINUX_PLATFORM:-$HOST_PLATFORM}"
 SHA="$(git -C "$REPO" rev-parse HEAD)"
-CLONE_PARENT="$(mktemp -d)"
+# Under TMPDIR when set, so the clone can be put somewhere the container runtime
+# shares: macOS `mktemp -d` otherwise picks a per-user /var/folders directory
+# that a Colima or Lima VM does not mount, and the container sees an empty /w.
+CLONE_PARENT="$(mktemp -d "${TMPDIR:-/tmp}/capmap-linux.XXXXXX")"
 CLONE="$CLONE_PARENT/capmap-linux"
 
 die() { echo "$1" >&2; exit 1; }

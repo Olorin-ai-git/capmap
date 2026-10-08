@@ -16,14 +16,19 @@ const REPO_ROOT_REL_PATH = ".";
  * keeps its short readable id, and the disambiguated ones read as what they
  * are. Assignment is deterministic in path order, so the same estate always
  * produces the same ids and the index stays diffable.
+ *
+ * `reserved` holds ids already given out in an earlier pass. Manifest packages
+ * are assigned first and Python sub-packages second, so a sub-package can never
+ * take the short id a manifest package held before sub-packages were indexed.
  */
 export function assignUnitIds(
   repoId: string,
   relPaths: string[],
+  reserved: ReadonlySet<string> = new Set(),
 ): Map<string, string> {
   const ordered = [...relPaths].sort((a, b) => a.localeCompare(b));
   const assigned = new Map<string, string>();
-  const taken = new Set<string>();
+  const taken = new Set<string>(reserved);
 
   for (const relPath of ordered) {
     if (relPath === REPO_ROOT_REL_PATH) {

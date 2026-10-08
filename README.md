@@ -75,7 +75,12 @@ git clone https://github.com/Olorin-ai-git/capmap && cd capmap
 pnpm install && pnpm -r build
 ```
 
-Describe your repositories in `config/repos.json` — each entry is a path
+Your index describes your private code, so keep it out of this checkout: copy
+`config/` to a directory of your own (`cp -r config ~/.capmap/config`) and the
+index is written beside it (`~/.capmap/index`). `capmap` refuses to write the
+index of an estate outside this checkout into this checkout's `index/`.
+
+Describe your repositories in that copy's `repos.json` — each entry is a path
 relative to `scan.config.json`'s `root`, plus a tier:
 
 ```json
@@ -103,13 +108,18 @@ Tiers are the load-bearing part. `core` and `active` may be recommended for
 import; `archived` and `external` never can be.
 
 ```bash
-export CAPMAP_CONFIG_DIR="$PWD/config"
+export CAPMAP_CONFIG_DIR="$HOME/.capmap/config"
 ANTHROPIC_API_KEY=... pnpm exec capmap scan     # index every configured repository
 
 pnpm exec capmap search billing                 # what already does this? no API key needed
 pnpm exec capmap show web/checkout
 pnpm exec capmap verify                         # does the index still match live source?
 ```
+
+A rescan pays for enrichment only where it can change something: a repository
+whose HEAD moved, or one holding units no enrichment has described yet (new
+sub-packages, or an earlier `--no-enrich` scan). `capmap scan --force`
+re-enriches the rest too.
 
 Then install the skills into Claude Code, and — when you actually want the
 enforcement — the hook. The skills are symlinked, not copied, so they track this
@@ -135,8 +145,12 @@ after a build.
   implementation bundled inside a control plane genuinely _is_ authentication —
   it is simply not extractable. Conflating the two hid every capability bundled
   inside a service.
-- **Fail closed.** Model unavailable → `UNRESOLVED`, never `BUILD`. An edit that
-  cannot be reconstructed → block. A plan with no record → block.
+- **Fail closed.** Model unavailable, or silent about a component →
+  `UNRESOLVED`, never `BUILD`; an index without domains is refused. An edit that
+  cannot be reconstructed → block. A plan with no record, a malformed record, or
+  a record not bound to the specification's current content → block. Writes to
+  `.capmap/` → block. Once configured, any error of the hook's own → block.
+  `gate --resolve` refuses to run without an operator at a terminal.
 - **Tier caps are unconditional.** Capabilities in `external` or `archived`
   repositories never exceed `REFERENCE`, whatever they score.
 - **A check that cannot fail is not a check.** Twenty-six of those were found
@@ -146,6 +160,28 @@ after a build.
   notice.
   [`docs/operations/checks-that-cannot-fail.md`](docs/operations/checks-that-cannot-fail.md)
   is the whole log, including the ones that were embarrassing.
+
+## Measuring it
+
+The thresholds are only as good as the verdicts they produce, so measure them.
+Write a labelled set — components your estate really duplicated, each with the
+verdict and capability a correct gate gives — and keep it beside your config,
+outside this checkout. [`example/labels.json`](example/labels.json) is the
+format, labelled for the example estate.
+
+```bash
+pnpm exec capmap eval ~/.capmap/labels.json            # gate accuracy + search recall
+pnpm exec capmap eval ~/.capmap/labels.json --no-gate  # search recall only, no API key
+```
+
+The result, with every case's score for calibrating the thresholds, is written
+to `labels.result.json` beside the set. If every case comes back `UNRESOLVED`
+the gate did not run, and nothing is recorded.
+
+Status: the shipped thresholds (`reuseThreshold` 0.7, `extendThreshold` 0.5)
+have not yet been calibrated against a real estate. Only search recall has
+been measured on one (7 of 9 real duplicates in the top 10); gate accuracy
+needs an enriched index and a model credential, and has not been run.
 
 ## What the verdicts mean
 

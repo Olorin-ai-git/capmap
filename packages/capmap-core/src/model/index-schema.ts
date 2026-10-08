@@ -6,6 +6,7 @@ export const INDEX_SCHEMA_VERSION = 1;
 export const PackageKindSchema = z.enum([
   "npm-package",
   "py-package",
+  "py-subpackage",
   "service",
   "app",
   "function",

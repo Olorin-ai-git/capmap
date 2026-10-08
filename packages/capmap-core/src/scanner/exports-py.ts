@@ -1,4 +1,6 @@
-import { readFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { access, readdir, readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { ExportResult } from "./exports-ts.js";
 
 const ALL_BLOCK = /^__all__\s*=\s*[[(]([\s\S]*?)[\])]/m;
@@ -35,4 +37,52 @@ export async function extractPyExports(
     .map((m) => m[1] as string)
     .filter((name) => !name.startsWith("_"));
   return { exports: [...new Set(declared)].sort(), extractionFailed: false };
+}
+
+const PY_MODULE = /^([A-Za-z][A-Za-z0-9_]*)\.py$/;
+/**
+ * A directory name Python can import. Anything else (a newline, a terminal
+ * escape) cannot be a package, and must not reach the index as one.
+ */
+export const PY_IDENTIFIER = /^[\p{L}_][\p{L}\p{N}_]*$/u;
+const INIT_FILE = "__init__.py";
+
+/**
+ * Export surface of a Python package, given its `__init__.py`.
+ *
+ * An `__init__.py` that declares nothing is the common shape of a package in a
+ * service monolith: its surface is then its public modules and sub-packages,
+ * which is what an importer actually reaches (`from app.services import x`).
+ */
+export async function extractPyPackageExports(
+  absInitPath: string,
+): Promise<ExportResult> {
+  const declared = await extractPyExports(absInitPath);
+  if (declared.extractionFailed || declared.exports.length > 0) return declared;
+  const dir = dirname(absInitPath);
+  let entries: Dirent[];
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return declared;
+  }
+  const names: string[] = [];
+  for (const entry of entries) {
+    const module = PY_MODULE.exec(entry.name)?.[1];
+    if (entry.isFile() && module !== undefined && entry.name !== INIT_FILE) {
+      names.push(module);
+    } else if (
+      entry.isDirectory() &&
+      !entry.name.startsWith("_") &&
+      PY_IDENTIFIER.test(entry.name)
+    ) {
+      try {
+        await access(join(dir, entry.name, INIT_FILE));
+        names.push(entry.name);
+      } catch {
+        continue;
+      }
+    }
+  }
+  return { exports: [...new Set(names)].sort(), extractionFailed: false };
 }

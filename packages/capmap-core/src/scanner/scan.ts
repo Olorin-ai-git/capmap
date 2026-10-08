@@ -82,6 +82,7 @@ export async function scanRepo(args: ScanRepoArgs): Promise<RepoScanResult> {
     internalScopes: args.scan.internalScopes,
     excludePaths: args.scan.excludePaths,
     nestedRepoPaths: nestedRepoPaths(args.repo, args.allRepos ?? [args.repo]),
+    python: args.scan.python,
   });
   // Configured scopes cannot know every repository's own naming convention, so
   // an edge naming a package found in this same scan is promoted to internal

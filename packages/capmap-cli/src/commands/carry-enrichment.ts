@@ -1,3 +1,4 @@
+import { sanitiseDomain, sanitiseModelText } from "@capmap/core";
 import type { DomainEntry, IndexStore, PackageEntry } from "@capmap/core";
 
 export interface CarriedEnrichment {
@@ -18,12 +19,14 @@ export interface CarriedEnrichment {
  *
  * Enrichment is carried by package id. A package whose id is absent from the
  * stored index is genuinely new and stays unenriched, which is honest. A
- * domain is kept only if at least one of its packages still exists, so a
- * domain cannot outlive everything it described.
+ * domain is kept only if at least one of its packages still exists as the
+ * same unit, so a domain cannot outlive everything it described. Carried text
+ * is sanitised and capped exactly as freshly enriched text is.
  */
 export async function carryEnrichment(
   store: IndexStore,
   repoId: string,
+  maxChars: number,
   scanned: PackageEntry[],
 ): Promise<CarriedEnrichment> {
   let previousPackages: PackageEntry[] = [];
@@ -37,25 +40,44 @@ export async function carryEnrichment(
     return { packages: scanned, domains: [] };
   }
 
+  // An id can come to name different code between scans (a new unit sorting
+  // earlier takes a short id). Enrichment describes code, so it is carried only
+  // when the id still names the same unit: same path and same kind.
   const byId = new Map(previousPackages.map((entry) => [entry.id, entry]));
-  const packages = scanned.map((entry) => {
+  const sameUnit = (entry: PackageEntry): PackageEntry | undefined => {
     const previous = byId.get(entry.id);
+    return previous !== undefined &&
+      previous.path === entry.path &&
+      previous.kind === entry.kind
+      ? previous
+      : undefined;
+  };
+  const packages = scanned.map((entry) => {
+    const previous = sameUnit(entry);
     if (previous === undefined || previous.summary === null) return entry;
+    // The stored text may predate sanitising, or be hand-written; it is made
+    // safe again on every carry rather than trusted for having been stored.
+    const summary = sanitiseModelText(previous.summary, maxChars);
+    if (summary === "") return entry;
     return {
       ...entry,
-      summary: previous.summary,
+      summary,
       domainTags: previous.domainTags,
       enrichmentFailed: previous.enrichmentFailed,
     };
   });
 
-  const surviving = new Set(packages.map((entry) => entry.id));
+  const surviving = new Set(
+    scanned.filter((entry) => sameUnit(entry) !== undefined).map((entry) => entry.id),
+  );
   const domains = previousDomains
     .map((domain) => ({
       ...domain,
       packages: domain.packages.filter((id) => surviving.has(id)),
     }))
-    .filter((domain) => domain.packages.length > 0);
+    .filter((domain) => domain.packages.length > 0)
+    .map((domain) => sanitiseDomain(domain, maxChars))
+    .filter((domain): domain is DomainEntry => domain !== null);
 
   return { packages, domains };
 }
