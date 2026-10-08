@@ -46,7 +46,16 @@ describe.each([
 
   it("leaves non-Markdown files under a specs folder alone", () => {
     expect(gated("/repo/specs/openapi.yaml")).toBe(false);
-    expect(gated("/repo/specs/029-x/contracts/api.json")).toBe(false);
-    expect(gated("/repo/plans/diagram.png")).toBe(false);
+  });
+
+  /**
+   * SP-3 audit round 3: narrowing the plan globs to Markdown let a plan in
+   * any other format (`.txt`, `.rst`, no extension) skip the gate. Plans
+   * fail closed whatever their format; only specifications were narrowed.
+   */
+  it("gates every file under a plans folder, whatever its format", () => {
+    for (const path of ["/repo/plans/x.txt", "/repo/docs/superpowers/plans/x.rst", "/repo/plans/x"]) {
+      expect(gated(path)).toBe(true);
+    }
   });
 });

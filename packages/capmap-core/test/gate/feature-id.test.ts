@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { deriveFeatureId } from "../../src/gate/feature-id.js";
-import { deriveFeatureId as deriveInHook } from "../../../../hooks/src/feature-id.js";
+import { deriveFeatureId, specKitLocation } from "../../src/gate/feature-id.js";
+import {
+  deriveFeatureId as deriveInHook,
+  specKitLocation as locateInHook,
+} from "../../../../hooks/src/feature-id.js";
 
 /**
  * The hook keeps its own dependency-free copy so it can start inside its 100 ms budget
@@ -106,5 +109,6 @@ describe("only a spec-kit folder names the feature", () => {
 describe("hook and core feature id derivation", () => {
   it.each(PATHS)("agrees on %s", (path) => {
     expect(deriveInHook(path)).toBe(deriveFeatureId(path));
+    expect(locateInHook(path)).toEqual(specKitLocation(path));
   });
 });

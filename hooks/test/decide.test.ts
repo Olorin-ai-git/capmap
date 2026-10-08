@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decide } from "../src/decide.js";
+import { classifyPath, decide } from "../src/decide.js";
 
 const HASH = `sha256:${"a".repeat(64)}`;
 
@@ -197,5 +197,21 @@ describe("a path matching BOTH glob sets gets both rules", () => {
 
   it("still allows an unchanged write when the record is resolved", () => {
     expect(decide({ ...base, ...both })).toMatchObject({ allow: true });
+  });
+});
+
+describe("classifyPath", () => {
+  const specsGated = { spec: (p: string) => p.includes("/specs/"), plan: () => false };
+
+  it("makes a spec-kit sibling a plan and spec.md the only specification", () => {
+    expect(classifyPath("/r/specs/029-x/spec.md", specsGated)).toEqual({ isSpec: true, isPlan: false });
+    expect(classifyPath("/r/specs/029-x/plan.md", specsGated)).toEqual({ isSpec: false, isPlan: true });
+    expect(classifyPath("/r/specs/029-x/contracts/a.yaml", specsGated)).toEqual({ isSpec: false, isPlan: true });
+    expect(classifyPath("/r/specs/029-x/checklists/q.md", specsGated)).toEqual({ isSpec: false, isPlan: false });
+  });
+
+  it("leaves a spec-kit folder to the globs when they do not gate its spec.md", () => {
+    const none = { spec: () => false, plan: () => false };
+    expect(classifyPath("/r/specs/029-x/plan.md", none)).toEqual({ isSpec: false, isPlan: false });
   });
 });

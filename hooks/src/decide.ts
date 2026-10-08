@@ -1,4 +1,5 @@
 import type { GateRecord } from "@capmap/core";
+import { specKitLocation } from "./feature-id.js";
 
 /** Environment variable that disables the gate, and the single value that does it. */
 export const BYPASS_ENV_VAR = "CAPMAP_GATE";
@@ -32,6 +33,37 @@ const NO_TARGET = "—";
 export interface GuardedPath {
   isSpec: boolean;
   isPlan: boolean;
+}
+
+/** The one specification of a spec-kit feature folder. */
+const SPEC_KIT_SPEC = /^spec\.(md|markdown)$/i;
+const SPEC_KIT_SPEC_FILE = "spec.md";
+/** Quality checklists written while specifying, before anything can be gated. */
+const SPEC_KIT_CHECKLISTS = /^checklists\//i;
+
+/**
+ * Classify a path against the spec and plan globs, with the spec-kit layout
+ * applied on top wherever the globs gate a feature folder's `spec.md`.
+ *
+ * In `specs/029-x/` only `spec.md` is the specification; `plan.md`, `tasks.md`,
+ * `research.md`, `data-model.md`, `quickstart.md` and `contracts/` implement
+ * it and share its gate record. Treated as specifications they were blocked
+ * once `spec.md` was gated (no component list of their own reads as the list
+ * removed), and they were written ungated before it, which is the hole plans
+ * fail closed to prevent. They are plans. `checklists/` is written while
+ * specifying, so it is neither.
+ */
+export function classifyPath(
+  filePath: string,
+  matches: { spec: (path: string) => boolean; plan: (path: string) => boolean },
+): GuardedPath {
+  const specKit = specKitLocation(filePath);
+  if (specKit !== null && matches.spec(`${specKit.dir}/${SPEC_KIT_SPEC_FILE}`)) {
+    if (SPEC_KIT_SPEC.test(specKit.within)) return { isSpec: true, isPlan: false };
+    if (SPEC_KIT_CHECKLISTS.test(specKit.within)) return { isSpec: false, isPlan: false };
+    return { isSpec: false, isPlan: true };
+  }
+  return { isSpec: matches.spec(filePath), isPlan: matches.plan(filePath) };
 }
 
 export interface DecideInput {

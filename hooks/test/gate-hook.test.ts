@@ -1,6 +1,6 @@
 import { describe, it, expect, afterAll, beforeAll } from "vitest";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile, access } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -446,5 +446,91 @@ describe("removal of the gated component list", () => {
     const { path, env } = await gatedFrom("flags");
     const result = await writeContent(path, "# Spec\n\nAll prose now.\n", env);
     expect(result.code).toBe(0);
+  });
+});
+
+/**
+ * SP-3 audit round 3, with the globs this repository ships. A spec-kit feature
+ * folder holds one specification (`spec.md`) and the documents that implement
+ * it. Linking them to one gate record made every sibling look like the
+ * specification with its component list deleted, so `/speckit.plan` could not
+ * write `plan.md` after gating; and since none matched a plan glob, before
+ * gating the whole plan could be written ungated. Plans of any format under
+ * `plans/` fail closed, as before the globs were narrowed to Markdown.
+ */
+describe("spec-kit feature folders and plan formats (shipped globs)", () => {
+  async function shipped(): Promise<{ root: string; env: NodeJS.ProcessEnv }> {
+    const { root, env } = await scenario();
+    const shippedHook = (JSON.parse(
+      await readFile(join(here, "..", "..", "config", "scan.config.json"), "utf8"),
+    ) as { hook: unknown }).hook;
+    const configFile = join(env["CAPMAP_CONFIG_DIR"] ?? "", "scan.config.json");
+    await writeFile(configFile, JSON.stringify({ hook: shippedHook, index: { dir: "index" } }));
+    const feature = join(root, "specs", "029-tenant-portal");
+    await mkdir(join(feature, "checklists"), { recursive: true });
+    await writeFile(join(feature, "spec.md"), "# Spec\n\n## Components\n\n- billing\n");
+    return { root, env };
+  }
+
+  async function gate(root: string): Promise<void> {
+    await mkdir(join(root, ".capmap"), { recursive: true });
+    await writeFile(
+      join(root, ".capmap", "gate-029-tenant-portal.json"),
+      JSON.stringify({
+        ...RESOLVED_RECORD,
+        componentsHash: HASH_OF_BILLING_ONLY,
+        componentsSource: "document",
+      }),
+    );
+  }
+
+  const siblings = [
+    "plan.md",
+    "tasks.md",
+    "research.md",
+    "data-model.md",
+    "quickstart.md",
+    "contracts/openapi.yaml",
+  ];
+
+  it("allows every implementing document once spec.md is gated", async () => {
+    const { root, env } = await shipped();
+    await gate(root);
+    const feature = join(root, "specs", "029-tenant-portal");
+    expect((await invoke(join(feature, "spec.md"), env)).code).toBe(0);
+    for (const name of siblings) {
+      const result = await invoke(join(feature, name), env);
+      expect({ name, ...result }).toMatchObject({ name, code: 0 });
+    }
+  });
+
+  it("blocks every implementing document before spec.md is gated", async () => {
+    const { root, env } = await shipped();
+    const feature = join(root, "specs", "029-tenant-portal");
+    for (const name of siblings) {
+      const result = await invoke(join(feature, name), env);
+      expect({ name, code: result.code }).toEqual({ name, code: EXIT_BLOCK });
+      expect(result.stderr).toMatch(/plan may not be written before/i);
+    }
+  });
+
+  it("still lets a new spec.md and its quality checklist be written ungated", async () => {
+    const { root, env } = await shipped();
+    const feature = join(root, "specs", "030-next");
+    expect((await invoke(join(feature, "spec.md"), env)).code).toBe(0);
+    expect((await invoke(join(feature, "checklists", "requirements.md"), env)).code).toBe(0);
+  });
+
+  it("fails closed for a plan under plans/ whatever its format", async () => {
+    const { root, env } = await shipped();
+    for (const name of ["2026-10-07-x.txt", "2026-10-07-x.rst", "2026-10-07-x.mdx", "2026-10-07-x"]) {
+      const result = await invoke(join(root, "docs", "superpowers", "plans", name), env);
+      expect({ name, code: result.code }).toEqual({ name, code: EXIT_BLOCK });
+    }
+  });
+
+  it("leaves a non-Markdown file directly under specs/ alone (CM-10)", async () => {
+    const { root, env } = await shipped();
+    expect((await invoke(join(root, "specs", "openapi.yaml"), env)).code).toBe(0);
   });
 });

@@ -84,7 +84,7 @@
       "**/specs/**/*.{md,markdown}"
     ],
     "planGlobs": [
-      "**/plans/**/*.{md,markdown}",
+      "**/plans/**",
       "**/docs/**/plan*.{md,markdown}"
     ]
   },

@@ -67,17 +67,26 @@ refusing writes on the strength of a default.
 | Repositories stale                       | allow, with a warning                                         |
 
 Globs default to `**/docs/superpowers/specs/**/*.{md,markdown}`,
-`**/specs/**/*.{md,markdown}`, `**/plans/**/*.{md,markdown}` and
+`**/specs/**/*.{md,markdown}`, `**/plans/**` and
 `**/docs/**/plan*.{md,markdown}`, and are configured in
-`config/scan.config.json`. They match Markdown only, so an OpenAPI file or a
-diagram kept beside a specification is never gated as one. The hook matches
-them without regard to case, so `plan.MD` is gated like `plan.md`.
+`config/scan.config.json`. Specifications are Markdown only, so an OpenAPI file
+kept beside a specification is never gated as one. Every file under `plans/`
+is a plan whatever its format, so a plan cannot skip the gate by its
+extension. The hook matches without regard to case, so `plan.MD` is gated like
+`plan.md`.
 
 A gate record is named by the feature id. In a spec-kit layout
 (`specs/029-tenant-portal/spec.md`, `plan.md`, `tasks.md`, `contracts/…`) the
 numbered folder directly under `specs/` is the feature, so every file in it
 shares one record (a numbered directory anywhere else is not); a file
 named only for its role (`docs/feature-a/spec.md`) takes its directory's name.
+
+Wherever the spec globs gate a feature folder's `spec.md`, the hook applies the
+spec-kit roles: `spec.md` is the specification, `checklists/` is written while
+specifying and is not gated, and every other file in the folder (`plan.md`,
+`tasks.md`, `research.md`, `data-model.md`, `quickstart.md`, `contracts/`) is a
+plan. Those are blocked until `spec.md` is gated and allowed once its record
+has no `UNRESOLVED` component.
 
 ## Bypassing
 
