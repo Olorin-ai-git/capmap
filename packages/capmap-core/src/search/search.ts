@@ -41,16 +41,21 @@ function tokenise(value: string): string[] {
 
 /**
  * Fraction of the query terms present in a haystack, counting substrings at
- * half credit — only where the shorter side is long enough — and zero when
- * that fraction is below the configured floor.
+ * half credit — only where the shorter side is long enough. An entry that
+ * contains a query term as a whole word is a hit at whatever fraction, so one
+ * word of a longer query still finds the capability it names; one whose only
+ * credit is substrings scores zero below the configured floor, so a query the
+ * index does not hold can still answer nothing.
  */
 function overlap(queryTerms: string[], haystack: string, scoring: ScanConfig["search"]): number {
   const terms = new Set(tokenise(haystack));
   if (terms.size === 0) return 0;
   let matched = 0;
+  let exact = 0;
   for (const term of queryTerms) {
     if (terms.has(term)) {
       matched += 1;
+      exact += 1;
       continue;
     }
     for (const candidate of terms) {
@@ -62,7 +67,7 @@ function overlap(queryTerms: string[], haystack: string, scoring: ScanConfig["se
     }
   }
   const fraction = matched / queryTerms.length;
-  return fraction >= scoring.minTermOverlap ? fraction : 0;
+  return exact > 0 || fraction >= scoring.minTermOverlap ? fraction : 0;
 }
 
 function compareHits(a: SearchHit, b: SearchHit): number {
@@ -146,8 +151,9 @@ function collect(
  * same index and query always produce the same ordering.
  */
 export function searchIndex(args: SearchArgs): SearchHit[] {
+  const stopwords = new Set(args.scoring.stopwords);
   const terms = tokenise(args.query).filter(
-    (term) => term.length >= args.scoring.minQueryTermLength,
+    (term) => term.length >= args.scoring.minQueryTermLength && !stopwords.has(term),
   );
   if (terms.length === 0) return [];
 

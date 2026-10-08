@@ -60,6 +60,12 @@ export const ScanConfigSchema = z.object({
     minPartialTermLength: z.number().int().positive(),
     /** Query words shorter than this ("a", "x") carry no meaning and are ignored. */
     minQueryTermLength: z.number().int().positive(),
+    /**
+     * Query words that carry no meaning ("for", "the", "via"). They are dropped
+     * before matching, so they neither match every summary nor count against
+     * the floor. Lower case; the list is the query language's.
+     */
+    stopwords: z.array(z.string()),
   }),
   verdicts: z
     .object({

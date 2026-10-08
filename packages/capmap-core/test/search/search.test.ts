@@ -70,7 +70,12 @@ const repos: RepoIndex[] = [
   },
 ];
 
-const SCORING = { minTermOverlap: 0.5, minPartialTermLength: 4, minQueryTermLength: 2 };
+const SCORING = {
+  minTermOverlap: 0.5,
+  minPartialTermLength: 4,
+  minQueryTermLength: 2,
+  stopwords: ["for", "the", "via", "of"],
+};
 
 describe("searchIndex", () => {
   it("ranks the matching domain above its packages", () => {
@@ -126,5 +131,41 @@ describe("search can answer nothing (CM-13)", () => {
     expect(search("authentication")).toContain("alpha/auth");
     expect(search("auth")).toContain("beta/auth");
     expect(search("billing stripe")).toContain("alpha/billing");
+  });
+});
+
+/**
+ * SP-3 audit round 3: removing the overlap floor left the suite green, and the
+ * floor counted stopwords and unmatched words against the query, so a real
+ * capability vanished from "stripe billing integration" and the skill reported
+ * that nothing covers the need. A whole-word match on a meaningful term is a
+ * hit; substring credit alone still has to clear the floor.
+ */
+describe("the overlap floor (SP-3 audit)", () => {
+  const shipped = (
+    JSON.parse(
+      readFileSync(join(here, "..", "..", "..", "..", "config", "scan.config.json"), "utf8"),
+    ) as { search: typeof SCORING }
+  ).search;
+  const example: RepoIndex[] = ["alpha", "beta", "vendor-toolkit"].map(
+    (id) =>
+      JSON.parse(
+        readFileSync(join(here, "..", "..", "..", "..", "index", "repos", `${id}.json`), "utf8"),
+      ) as RepoIndex,
+  );
+  const search = (query: string): string[] =>
+    searchIndex({ scoring: shipped, repos: example, query, limit: 10 }).map((hit) => hit.id);
+
+  it("drops an entry whose only credit is a substring match below the floor", () => {
+    expect(search("authentic kubernetes")).toEqual([]);
+  });
+
+  it("finds a capability named by one word of a longer query", () => {
+    expect(search("stripe billing integration")).toContain("alpha/billing");
+  });
+
+  it("ignores stopwords, so they neither match nor dilute the query", () => {
+    expect(search("billing for the tenants")).toContain("alpha/billing");
+    expect(search("for the via")).toEqual([]);
   });
 });

@@ -54,7 +54,8 @@
   "search": {
     "minTermOverlap": 0.5,
     "minPartialTermLength": 4,
-    "minQueryTermLength": 2
+    "minQueryTermLength": 2,
+    "stopwords": ["a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "in", "into", "is", "it", "of", "on", "or", "that", "the", "this", "to", "via", "we", "what", "with"]
   },
   "verdicts": {
     "reuseThreshold": 0.7,

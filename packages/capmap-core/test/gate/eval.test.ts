@@ -12,7 +12,7 @@ import { INDEX_SCHEMA_VERSION, type RepoIndex } from "../../src/model/index-sche
  * ranker emitted, and nothing measured whether the resulting verdicts were
  * right. A labelled set and its scoring make that measurable.
  */
-const SCORING = { minTermOverlap: 0.5, minPartialTermLength: 4, minQueryTermLength: 2 };
+const SCORING = { minTermOverlap: 0.5, minPartialTermLength: 4, minQueryTermLength: 2, stopwords: ["the"] };
 
 const set = LabelledSetSchema.parse({
   cases: [
