@@ -5,6 +5,7 @@ import { containedPath } from "./contained.js";
 import type { Candidate } from "./discover.js";
 import type { ParsedManifest } from "./manifest-npm.js";
 import { TEST_DIR_NAMES } from "./metrics.js";
+import { packageImports } from "./py-imports.js";
 
 const INIT_FILE = "__init__.py";
 const REPO_ROOT_REL_PATH = ".";
@@ -26,6 +27,12 @@ export interface SubpackageArgs {
 export interface Subpackage {
   candidate: Candidate;
   manifest: ParsedManifest;
+}
+
+export interface SubpackageResult {
+  subpackages: Subpackage[];
+  /** Sub-packages the project's own modules (outside every sub-package) import. */
+  projectImports: string[];
 }
 
 function repoRel(project: Candidate, rel: string): string {
@@ -53,10 +60,14 @@ function stopsBeneath(project: Candidate, stopRelPaths: Set<string>): string[] {
  * every package beneath a root down to `maxDepth`, becomes a unit of kind
  * `py-subpackage`, named by its dotted import path. Whether each is significant
  * enough to index is then decided by the same scoring as any other unit.
+ *
+ * Imports between them are their dependency edges. Without them every
+ * sub-package had no consumers, so the `internalConsumers` signal was always
+ * zero and a service inside a monolith could not clear the threshold.
  */
 export async function discoverSubpackages(
   args: SubpackageArgs,
-): Promise<Subpackage[]> {
+): Promise<SubpackageResult> {
   const { project, manifest } = args;
   const exclude = new Set(args.excludePaths);
   const stops = stopsBeneath(project, args.stopRelPaths);
@@ -107,5 +118,25 @@ export async function discoverSubpackages(
   for (const root of manifest.importRoots) {
     await visit(root, root.split("/").pop() ?? root, 0);
   }
-  return out;
+
+  const known = new Set(out.map((sub) => sub.manifest.name));
+  const skipDirsAbs = new Set(out.map((sub) => sub.candidate.absPath));
+  const importsOf = (dirAbs: string, dotted: string, self: string | null): Promise<string[]> =>
+    packageImports({ scope: { dirAbs, dotted }, self, known, skipDirsAbs, exclude });
+  for (const sub of out) {
+    sub.manifest.deps.internal = await importsOf(
+      sub.candidate.absPath,
+      sub.manifest.name,
+      sub.manifest.name,
+    );
+  }
+  const projectImports = new Set<string>();
+  for (const root of manifest.importRoots) {
+    const dirAbs = join(project.absPath, root);
+    if (skipDirsAbs.has(dirAbs)) continue;
+    for (const name of await importsOf(dirAbs, root.split("/").pop() ?? root, null)) {
+      projectImports.add(name);
+    }
+  }
+  return { subpackages: out, projectImports: [...projectImports].sort() };
 }

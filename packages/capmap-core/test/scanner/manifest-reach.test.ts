@@ -253,3 +253,68 @@ describe("sub-package discovery stays within capabilities (CM-7, CM-11)", () => 
     expect(new Set(units.map((u) => u.id)).size).toBe(units.length);
   });
 });
+
+/**
+ * SP-3 audit round 3: a sub-package was given no dependency edges, so the
+ * `internalConsumers` signal was always zero and a service inside a monolith
+ * could not clear the significance threshold. Imports between the packages of
+ * one project are its consumer edges.
+ */
+describe("consumer edges between sub-packages (SP-3 audit)", () => {
+  async function service(): Promise<string> {
+    return tree({
+      "est/svc/pyproject.toml": '[tool.poetry]\npackage-mode = false\n[project]\nname = "svc"\n',
+      "est/svc/app/__init__.py": "",
+      "est/svc/app/main.py": "from app.services import billing\nimport app.services.auth.tokens as tok\n",
+      "est/svc/app/services/__init__.py": "",
+      "est/svc/app/services/auth/__init__.py": "from ..billing import charge  # relative\nfrom .tokens import issue\n",
+      "est/svc/app/services/auth/tokens.py": "def issue():\n    pass\n",
+      "est/svc/app/services/billing/__init__.py": "def charge():\n    pass\n",
+      "est/svc/app/api/__init__.py":
+        "from app.services.auth import (\n    issue,\n)\nfrom app.services.billing import charge\nimport os, app.services.auth\n",
+      "est/svc/app/tests/test_auth.py": "from app.services.auth import issue\n",
+    });
+  }
+
+  it("records the imports between packages of one project as internal dependencies", async () => {
+    const root = await service();
+    const units = await buildUnits({
+      rootAbs: join(root, "est"),
+      repo: { id: "svc", path: "svc", tier: "core", vcs: "none" },
+      internalScopes: SCOPES,
+      excludePaths: [],
+      python: { subpackageMaxDepth: 3 },
+    });
+    const deps = new Map(units.map((u) => [u.candidate.relPath, u.manifest.deps.internal]));
+    expect(deps.get("app/api")).toEqual(["app.services.auth", "app.services.billing"]);
+    expect(deps.get("app/services/auth")).toEqual(["app.services.billing"]);
+    expect(deps.get("app/services/billing")).toEqual([]);
+    // The project's own modules (app/main.py) consume what they import.
+    expect(deps.get(".")).toEqual(
+      expect.arrayContaining(["app.services.auth", "app.services.billing"]),
+    );
+  });
+
+  it("credits those consumers in the scan, and a test package is not a consumer", async () => {
+    const root = await service();
+    const result = await scanRepo({
+      rootAbs: join(root, "est"),
+      repo: { id: "svc", path: "svc", tier: "core", vcs: "none" },
+      scan: {
+        internalScopes: SCOPES,
+        excludePaths: [],
+        python: { subpackageMaxDepth: 3 },
+        significance: SCAN,
+        maturity: { gaRecencyDays: 180 },
+      } as unknown as ScanConfig,
+      git: nullGit(),
+      clock: fixedClock(new Date("2026-10-01T00:00:00Z")),
+      logger: silentLogger(),
+    });
+    const consumers = (id: string): string[] =>
+      result.packages.find((p) => p.id === id)?.consumers ?? [];
+    expect(consumers("svc/billing").sort()).toEqual(["svc/api", "svc/auth", "svc/svc"]);
+    expect(consumers("svc/auth").sort()).toEqual(["svc/api", "svc/svc"]);
+    expect(result.breakdowns.get("svc/auth")?.parts.internalConsumers).toBeGreaterThan(0);
+  });
+});

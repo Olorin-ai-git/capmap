@@ -106,15 +106,21 @@ export async function buildUnits(args: BuildUnitsArgs): Promise<Unit[]> {
   ]);
   for (const project of [...parsed]) {
     if (project.manifest.importRoots.length === 0) continue;
-    parsed.push(
-      ...(await discoverSubpackages({
-        project: project.candidate,
-        manifest: project.manifest,
-        maxDepth: args.python.subpackageMaxDepth,
-        excludePaths: args.excludePaths,
-        stopRelPaths,
-      })),
-    );
+    const found = await discoverSubpackages({
+      project: project.candidate,
+      manifest: project.manifest,
+      maxDepth: args.python.subpackageMaxDepth,
+      excludePaths: args.excludePaths,
+      stopRelPaths,
+    });
+    project.manifest = {
+      ...project.manifest,
+      deps: {
+        ...project.manifest.deps,
+        internal: [...new Set([...project.manifest.deps.internal, ...found.projectImports])].sort(),
+      },
+    };
+    parsed.push(...found.subpackages);
   }
   parsed.sort((a, b) => a.candidate.relPath.localeCompare(b.candidate.relPath));
 
