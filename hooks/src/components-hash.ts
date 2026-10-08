@@ -26,7 +26,10 @@ const NEXT_HEADING = /^#{1,2}[ \t]+/m;
 const LIST_ITEM = /^([ \t]*)(?:[-*+]|\d+[.)])[ \t]+(.+)$/;
 const FENCE = /^[ \t]{0,3}(`{3,}|~{3,})/;
 const VERDICTS_HEADING = /^##[ \t]+Reuse Verdicts[ \t]*$/im;
-const TABLE_ROW = /^[ \t]*\|/;
+const TABLE_ROW = /^[ \t]*\|(.*?)\|?[ \t]*$/;
+const SEPARATOR_ROW = /^[\s:|-]*-[\s:|-]*$/;
+const HEADER_CELL = /^component$/i;
+const VERDICT_WORDS = new Set(["REUSE", "EXTEND", "REFERENCE", "BUILD", "UNRESOLVED"]);
 const BOLD = /\*\*(.+?)\*\*/;
 const DESCRIPTION_SEPARATOR = /\s+[—–-]\s+|:\s+/;
 const WHITESPACE_RUN = /\s+/g;
@@ -85,18 +88,35 @@ export function extractComponents(markdown: string): string[] | null {
   return items.filter((item) => item.depth === top).map((item) => item.name);
 }
 
+/**
+ * A row of the copied verdict table: its header, its separator, or a verdict of a
+ * component the specification declares. Any other row — `| NEW SCOPE: … |`, or a
+ * verdict for an undeclared component — is content, or scope could be added there
+ * without a re-gate.
+ */
+function isCopiedVerdictRow(line: string, declared: Set<string>): boolean {
+  const inner = TABLE_ROW.exec(line)?.[1];
+  if (inner === undefined) return false;
+  if (SEPARATOR_ROW.test(inner)) return true;
+  const cells = inner.split("|").map((cell) => cell.trim());
+  const [name = "", verdict = ""] = cells;
+  if (HEADER_CELL.test(name)) return true;
+  return declared.has(normalise([name])[0] ?? "") && VERDICT_WORDS.has(verdict);
+}
+
 /** Digest binding a gate record to its specification; see the core copy. */
 export function specContentHash(markdown: string): string {
   let text = unixLines(markdown);
   const heading = VERDICTS_HEADING.exec(text);
   if (heading !== null) {
+    const declared = new Set(normalise(extractComponents(markdown) ?? []));
     const after = text.slice(heading.index + heading[0].length);
     const next = NEXT_HEADING.exec(after);
     // Only the copied table is exempt: any other line under the heading is
     // content, or scope could be added beneath it without a re-gate.
     const kept = (next === null ? after : after.slice(0, next.index))
       .split("\n")
-      .filter((line) => line.trim() !== "" && !TABLE_ROW.test(line));
+      .filter((line) => line.trim() !== "" && !isCopiedVerdictRow(line, declared));
     text =
       text.slice(0, heading.index) +
       kept.map((line) => `${line}\n`).join("") +

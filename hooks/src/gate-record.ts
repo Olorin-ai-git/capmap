@@ -1,7 +1,8 @@
-import { readFile, realpath } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import type { GateRecord } from "@capmap/core";
 import { componentsHash, extractComponents, specContentHash } from "./components-hash.js";
+import { readRegularFile } from "./read-regular.js";
 
 /**
  * A dependency-free validator for gate records, plus the checks that bind a
@@ -125,30 +126,38 @@ export async function canonical(path: string): Promise<string> {
  * Why this record does not belong to the file being written, or null when it does.
  *
  * A specification must be the very file the record was gated from. A plan is
- * bound through its specification: that file must be a specification by the
+ * bound through the specification it names (plan-spec.ts): the record must
+ * have been gated from that file, which must be a specification by the
  * configured globs, still hash to the content the gate saw, and — when it
- * declares a `## Components` section — be gated for exactly those components.
- * Otherwise a record gated from a decoy document, or from `--component` flags
- * that replaced the declared list, would clear a plan nobody gated.
+ * declares a `## Components` section — be gated for exactly those components;
+ * and the record must have been scored against the index the hook is
+ * configured with. Otherwise a record gated from a decoy document, from
+ * `--component` flags that replaced the declared list, or against an index of
+ * the agent's making, would clear a plan nobody gated.
  */
 export async function bindingProblem(
   record: GateRecord,
-  fileAbs: string,
-  isPlan: boolean,
+  target: { spec: string } | { plan: string; indexGeneratedAt: string },
   isSpec: (path: string) => boolean,
 ): Promise<string | null> {
   const specAbs = await canonical(record.specPath);
-  if (!isPlan) {
-    return specAbs === (await canonical(fileAbs))
+  if ("spec" in target) {
+    return specAbs === (await canonical(target.spec))
       ? null
       : `it was produced for ${record.specPath}, not this file`;
+  }
+  if (specAbs !== (await canonical(target.plan))) {
+    return `it was produced for ${record.specPath}, not ${target.plan}, the specification this plan names`;
   }
   if (!isSpec(record.specPath) && !isSpec(specAbs)) {
     return `it was produced for ${record.specPath}, which is not a specification by the configured globs`;
   }
+  if (record.indexGeneratedAt !== target.indexGeneratedAt) {
+    return `it was scored against the index of ${record.indexGeneratedAt}, not the configured index of ${target.indexGeneratedAt}`;
+  }
   let text: string;
   try {
-    text = await readFile(record.specPath, "utf8");
+    text = await readRegularFile(record.specPath);
   } catch {
     return `its specification ${record.specPath} cannot be read`;
   }

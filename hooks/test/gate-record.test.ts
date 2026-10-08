@@ -71,23 +71,27 @@ describe("bindingProblem", () => {
     await writeFile(spec, SPEC);
     await symlink(join(dir, "specs"), join(dir, "s"));
     const r = parse(record(spec, ["billing"])).record!;
-    expect(await bindingProblem(r, join(dir, "s", "foo.md"), false, isSpec)).toBeNull();
-    expect(await bindingProblem(r, join(dir, "specs", "other.md"), false, isSpec)).toMatch(/not this file/);
+    expect(await bindingProblem(r, { spec: join(dir, "s", "foo.md") }, isSpec)).toBeNull();
+    expect(await bindingProblem(r, { spec: join(dir, "specs", "other.md") }, isSpec)).toMatch(/not this file/);
   });
 
-  it("binds a plan to a specification by the globs, its content and its declared components", async () => {
+  it("binds a plan to the specification it names, by the globs, its content, its components and the index", async () => {
     const dir = await root();
     const spec = join(dir, "specs", "foo.md");
     await writeFile(spec, SPEC);
-    const plan = join(dir, "plans", "foo.md");
-    expect(await bindingProblem(parse(record(spec, ["billing"])).record!, plan, true, isSpec)).toBeNull();
-    expect(await bindingProblem(parse(record(spec, ["xyzzy"])).record!, plan, true, isSpec)).toMatch(/declares/);
+    const named = (path: string): { plan: string; indexGeneratedAt: string } => ({ plan: path, indexGeneratedAt: "t" });
+    expect(await bindingProblem(parse(record(spec, ["billing"])).record!, named(spec), isSpec)).toBeNull();
+    expect(await bindingProblem(parse(record(spec, ["xyzzy"])).record!, named(spec), isSpec)).toMatch(/declares/);
+    expect(await bindingProblem(parse(record(spec, ["billing"])).record!, { plan: spec, indexGeneratedAt: "u" }, isSpec))
+      .toMatch(/index/);
     const decoy = join(dir, "decoy.md");
     await writeFile(decoy, SPEC);
-    expect(await bindingProblem(parse(record(decoy, ["billing"])).record!, plan, true, isSpec)).toMatch(/globs/);
-    expect(await bindingProblem(parse(record(join(dir, "specs", "gone.md"), ["billing"])).record!, plan, true, isSpec)).toMatch(/cannot be read/);
+    expect(await bindingProblem(parse(record(decoy, ["billing"])).record!, named(spec), isSpec)).toMatch(/names/);
+    expect(await bindingProblem(parse(record(decoy, ["billing"])).record!, named(decoy), isSpec)).toMatch(/globs/);
+    const gone = join(dir, "specs", "gone.md");
+    expect(await bindingProblem(parse(record(gone, ["billing"])).record!, named(gone), isSpec)).toMatch(/cannot be read/);
     await writeFile(spec, `${SPEC}\nmore\n`);
-    expect(await bindingProblem(parse(record(spec, ["billing"])).record!, plan, true, isSpec)).toMatch(/changed/);
+    expect(await bindingProblem(parse(record(spec, ["billing"])).record!, named(spec), isSpec)).toMatch(/changed/);
   });
 });
 

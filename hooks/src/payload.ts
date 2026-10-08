@@ -1,6 +1,5 @@
-import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { bashTargets } from "./bash-targets.js";
+import { bashTargets, type ShellContext } from "./bash-targets.js";
 import type { PendingEdit } from "./pending-document.js";
 
 /** Reading the hook's input: the tool call payload and the scan configuration. */
@@ -23,7 +22,14 @@ export interface HookPayload {
 }
 
 export interface HookConfig {
-  hook: { specGlobs: string[]; planGlobs: string[] };
+  hook: {
+    specGlobs: string[];
+    planGlobs: string[];
+    exemptGlobs: string[];
+    deadlineMs: number;
+    maxShellWords: number;
+    maxShellPaths: number;
+  };
   index: { dir: string };
 }
 
@@ -37,21 +43,32 @@ export function loadConfig(text: string): HookConfig {
   const config = JSON.parse(text) as Partial<HookConfig>;
   const globs = (value: unknown): boolean =>
     Array.isArray(value) && value.every((glob) => typeof glob === "string");
+  const count = (value: unknown): boolean => Number.isSafeInteger(value) && (value as number) > 0;
   if (
     !globs(config.hook?.specGlobs) ||
     !globs(config.hook?.planGlobs) ||
+    !globs(config.hook?.exemptGlobs) ||
+    !count(config.hook?.deadlineMs) ||
+    !count(config.hook?.maxShellWords) ||
+    !count(config.hook?.maxShellPaths) ||
     typeof config.index?.dir !== "string"
   ) {
-    throw new Error(`${SCAN_CONFIG_FILE} has no valid "hook" globs or "index.dir"`);
+    throw new Error(
+      `${SCAN_CONFIG_FILE} has no valid "hook" globs, deadlineMs, maxShellWords and maxShellPaths, or "index.dir"`,
+    );
   }
   return config as HookConfig;
 }
 
-export function targetsOf(payload: HookPayload, cwd: string): Target[] {
+export function targetsOf(
+  payload: HookPayload,
+  cwd: string,
+  shell: Omit<ShellContext, "cwd">,
+): Target[] {
   const tool = payload.tool_name ?? "";
   const input = payload.tool_input ?? {};
   if (tool === BASH_TOOL) {
-    return bashTargets(input.command ?? "", cwd, homedir()).map((fileAbs) => ({
+    return bashTargets(input.command ?? "", { ...shell, cwd }).map((fileAbs) => ({
       fileAbs,
       input: null,
     }));

@@ -1,26 +1,37 @@
 #!/usr/bin/env node
-import { access, readFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
+import { access } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import picomatch from "picomatch";
-import { BYPASS_ENV_VAR, BYPASS_VALUE, decide, type Decision } from "./decide.js";
-import { deriveFeatureId } from "./feature-id.js";
-import { runsOperatorCommand } from "./bash-targets.js";
-import { bindingProblem, canonical, isGateRecordPath, parseGateRecord } from "./gate-record.js";
-import { AMBIGUOUS_EDIT_HASH, pendingHash } from "./pending-document.js";
-import { loadConfig, targetsOf, type HookConfig, type HookPayload, type Target } from "./payload.js";
+import { BYPASS_ENV_VAR, BYPASS_VALUE } from "./decide.js";
+import { bashAnalysis } from "./bash-targets.js";
+import { blockUnlessBypassed, evaluate, type Context } from "./evaluate.js";
+import { canonical } from "./gate-record.js";
+import { readRegularFile } from "./read-regular.js";
+import { loadConfig, targetsOf, type HookPayload } from "./payload.js";
 
 const EXIT_ALLOW = 0;
 const EXIT_BLOCK = 2;
-const GATE_DIR = ".capmap";
 const CONFIG_DIR_ENV_VAR = "CAPMAP_CONFIG_DIR";
+const CDPATH_ENV_VAR = "CDPATH";
 const SCAN_CONFIG_FILE = "scan.config.json";
 const MANIFEST_FILE = "index.json";
-const GIT_DIR = ".git";
+const PACKAGE_FILE = "package.json";
+const GLOB_LIBRARY = "picomatch";
 const BASH_TOOL = "Bash";
 const LINE_TERMINATOR = "\n";
 /** Case-insensitive, and into dot directories such as `.claude/worktrees`. */
 const GLOB_OPTIONS = { nocase: true, dot: true };
+
+/** Where the hook's own compiled code lives. */
+const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
+
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString("utf8");
+}
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -31,127 +42,60 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-async function readStdin(): Promise<string> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks).toString("utf8");
+/** The index manifest's generation time, or null when there is no index. */
+async function indexGeneratedAt(manifest: string): Promise<string | null> {
+  if (!(await exists(manifest))) return null;
+  const { generatedAt } = JSON.parse(await readRegularFile(manifest)) as { generatedAt?: unknown };
+  if (typeof generatedAt !== "string" || generatedAt === "") throw new Error(`${manifest} has no generatedAt`);
+  return generatedAt;
 }
-
-/**
- * Gate records live beside the repository they describe, so a specification and
- * its plan resolve to the same directory however deeply either is nested.
- */
-async function gateDirFor(fileAbs: string): Promise<string> {
-  let current = dirname(fileAbs);
-  for (;;) {
-    if (await exists(join(current, GIT_DIR))) return join(current, GATE_DIR);
-    const parent = dirname(current);
-    if (parent === current) return join(dirname(fileAbs), GATE_DIR);
-    current = parent;
-  }
-}
-
-interface Context {
-  config: HookConfig;
-  configDir: string;
-  /**
-   * Directories only the operator or capmap itself may write: the gate's
-   * configuration, its index and the hook's own code. Changing any of them
-   * steers or disables the gate as surely as forging a record.
-   */
-  protectedDirs: string[];
-  bypass: boolean;
-  isSpec: (path: string) => boolean;
-  isPlan: (path: string) => boolean;
-}
-
-function blockUnlessBypassed(ctx: Context, what: string, path: string): Decision {
-  return ctx.bypass
-    ? { allow: true, warning: `${BYPASS_ENV_VAR}=${BYPASS_VALUE}: ${what} allowed` }
-    : { allow: false, reason: `${what} is not allowed: ${path}\nBypass: ${BYPASS_ENV_VAR}=${BYPASS_VALUE}` };
-}
-
-const lower = (path: string): string => path.toLowerCase();
-const within = (dir: string, path: string): boolean =>
-  lower(path) === lower(dir) || lower(path).startsWith(lower(dir) + sep);
-
-async function evaluate(target: Target, ctx: Context): Promise<Decision> {
-  // Decided on the path as written and as it resolves, so a symbolic link
-  // cannot carry a write into a guarded place under an unguarded name.
-  const raw = target.fileAbs;
-  const fileAbs = await canonical(raw);
-  if (isGateRecordPath(raw) || isGateRecordPath(fileAbs)) {
-    return blockUnlessBypassed(
-      ctx,
-      `Writing a gate record other than through "capmap gate"`,
-      fileAbs,
-    );
-  }
-  if (ctx.protectedDirs.some((dir) => within(dir, fileAbs))) {
-    return blockUnlessBypassed(ctx, "Changing the reuse gate's configuration, index or hook", fileAbs);
-  }
-  const isSpec = ctx.isSpec(raw) || ctx.isSpec(fileAbs);
-  const isPlan = ctx.isPlan(raw) || ctx.isPlan(fileAbs);
-  if (!isSpec && !isPlan) return { allow: true, warning: null };
-
-  const feature = deriveFeatureId(fileAbs);
-  const recordPath = join(await gateDirFor(fileAbs), `gate-${feature}.json`);
-  let record = null;
-  let recordProblem = null;
-  if (await exists(recordPath)) {
-    const parsed = parseGateRecord(await readFile(recordPath, "utf8"), feature);
-    record = parsed.record;
-    recordProblem =
-      parsed.problem ?? (await bindingProblem(parsed.record, fileAbs, isPlan, ctx.isSpec));
-  }
-
-  return decide({
-    filePath: fileAbs,
-    fileExists: await exists(fileAbs),
-    isSpec,
-    isPlan,
-    record,
-    recordProblem,
-    currentComponentsHash:
-      target.input === null
-        ? isSpec ? AMBIGUOUS_EDIT_HASH : null
-        : await pendingHash(fileAbs, target.input),
-    indexPresent: await exists(
-      resolve(ctx.configDir, "..", ctx.config.index.dir, MANIFEST_FILE),
-    ),
-    bypass: ctx.bypass,
-  });
-}
-
-/** Where the hook's own compiled code lives. */
-const HOOK_DIR = dirname(fileURLToPath(import.meta.url));
 
 async function run(configDir: string, bypass: boolean): Promise<number> {
   const payload = JSON.parse(await readStdin()) as HookPayload;
-  const config = loadConfig(
-    await readFile(resolve(configDir, SCAN_CONFIG_FILE), "utf8"),
-  );
+  const config = loadConfig(await readRegularFile(resolve(configDir, SCAN_CONFIG_FILE)));
+  // A hook that never answers is let through by Claude Code's timeout, so it answers itself first.
+  setTimeout(() => {
+    process.stderr.write(`capmap gate hook did not decide within ${String(config.hook.deadlineMs)} ms; ` +
+      (bypass ? `allowed under ${BYPASS_ENV_VAR}=${BYPASS_VALUE}` : "blocking") + LINE_TERMINATOR);
+    process.exit(bypass ? EXIT_ALLOW : EXIT_BLOCK);
+  }, config.hook.deadlineMs).unref();
+  // Loaded here, not at module load, so a missing or broken dependency blocks instead of crashing open.
+  const { default: picomatch } = await import("picomatch");
+  const matcher = (globs: string[]): ((path: string) => boolean) =>
+    globs.length === 0 ? () => false : picomatch(globs, GLOB_OPTIONS);
+  const hookPackage = dirname(HOOK_DIR);
+  const library = dirname(createRequire(join(hookPackage, PACKAGE_FILE)).resolve(`${GLOB_LIBRARY}/${PACKAGE_FILE}`));
   const ctx: Context = {
-    config,
-    configDir,
     protectedDirs: await Promise.all(
-      [configDir, resolve(configDir, "..", config.index.dir), HOOK_DIR].map(canonical),
+      [configDir, resolve(configDir, "..", config.index.dir), HOOK_DIR, join(hookPackage, PACKAGE_FILE), library]
+        .map(canonical),
     ),
     bypass,
-    isSpec: picomatch(config.hook.specGlobs, GLOB_OPTIONS),
-    isPlan: picomatch(config.hook.planGlobs, GLOB_OPTIONS),
+    isSpec: matcher(config.hook.specGlobs),
+    isPlan: matcher(config.hook.planGlobs),
+    isExempt: matcher(config.hook.exemptGlobs),
+    indexGeneratedAt: await indexGeneratedAt(resolve(configDir, "..", config.index.dir, MANIFEST_FILE)),
   };
-  if (payload.tool_name === BASH_TOOL && runsOperatorCommand(payload.tool_input?.command ?? "")) {
+  const shell = {
+    home: homedir(),
+    cdpath: (process.env[CDPATH_ENV_VAR] ?? "") !== "",
+    maxWords: config.hook.maxShellWords,
+    maxPaths: config.hook.maxShellPaths,
+    configDirs: [resolve(configDir), await canonical(resolve(configDir))],
+  };
+  const cwd = payload.cwd ?? process.cwd();
+  const command = payload.tool_input?.command ?? "";
+  if (payload.tool_name === BASH_TOOL && bashAnalysis(command, { ...shell, cwd }).operator) {
     const decision = blockUnlessBypassed(
       ctx,
       `Running "capmap gate --resolve" from an agent (it is answered by the operator, at a terminal)`,
-      payload.tool_input?.command ?? "",
+      command,
     );
     process.stderr.write(`${decision.allow ? decision.warning : decision.reason}${LINE_TERMINATOR}`);
     if (!decision.allow) return EXIT_BLOCK;
   }
   const warnings = new Set<string>();
-  for (const target of targetsOf(payload, payload.cwd ?? process.cwd())) {
+  for (const target of targetsOf(payload, cwd, shell)) {
     const decision = await evaluate(target, ctx);
     if (!decision.allow) {
       process.stderr.write(`${decision.reason}${LINE_TERMINATOR}`);
@@ -168,6 +112,8 @@ async function run(configDir: string, bypass: boolean): Promise<number> {
  * refusing writes on the strength of a default. Configured, any error of its
  * own blocks. Exit 1 is non-blocking to Claude Code, so an uncaught exception
  * used to let the write through — a malformed record or config opened the gate.
+ * An error before this code runs at all (it cannot be parsed) is caught by the
+ * documented registration, which turns any other exit into 2.
  */
 async function main(): Promise<number> {
   const configDir = process.env[CONFIG_DIR_ENV_VAR];

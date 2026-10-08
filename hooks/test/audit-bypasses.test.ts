@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { componentsHash, specContentHash } from "../src/components-hash.js";
+import { INDEX_GENERATED_AT } from "./hook-harness.js";
 
 /**
  * Regression tests for the gate bypasses in the capmap audit (CM-1, CM-4, CM-5,
@@ -35,7 +36,8 @@ function invoke(payload: Payload | string, env: NodeJS.ProcessEnv = {}): Promise
   });
 }
 
-const write = (file_path: string, content = "# Doc\n"): Payload => ({
+/** Names the specification, as a plan must, so a plan is blocked for the reason under test. */
+const write = (file_path: string, content = "# Doc\n\nSpec: specs/foo.md\n"): Payload => ({
   tool_name: "Write",
   tool_input: { file_path, content },
 });
@@ -65,7 +67,7 @@ function genuineRecord(root: string, spec = SPEC_TEXT): Record<string, unknown> 
     specContentHash: specContentHash(spec),
     componentsSource: "document",
     generatedAt: "2026-10-06T00:00:00.000Z",
-    indexGeneratedAt: "2026-10-05T00:00:00.000Z",
+    indexGeneratedAt: INDEX_GENERATED_AT,
     staleRepos: [],
     components: [
       {

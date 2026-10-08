@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
 import { componentsHash, extractComponents } from "./components-hash.js";
+import { readRegularFile } from "./read-regular.js";
 
 /**
  * Stands in for "the post-edit document could not be reconstructed". It can
@@ -7,6 +7,9 @@ import { componentsHash, extractComponents } from "./components-hash.js";
  * blocks — failing closed on an edit whose effect is unknown.
  */
 export const AMBIGUOUS_EDIT_HASH = "sha256:unreconstructable-edit";
+const CR = "\r";
+const CRLF = /\r\n/g;
+const LF = "\n";
 
 /** One replacement, as Edit sends it and as each entry of MultiEdit's `edits`. */
 export interface EditOperation {
@@ -24,7 +27,7 @@ export interface PendingEdit extends EditOperation {
 
 async function readOrNull(path: string): Promise<string | null> {
   try {
-    return await readFile(path, "utf8");
+    return await readRegularFile(path);
   } catch {
     return null;
   }
@@ -70,8 +73,11 @@ export async function pendingDocument(
   const edits = input?.edits ?? (input?.new_string === undefined ? [] : [input]);
   if (edits.length === 0) return { text: current, ambiguous: false };
 
+  // Claude Code's Edit sends LF line endings for a CRLF file; match them on the
+  // LF form, which hashes the same (components-hash.ts reads either).
+  const lfEdit = edits.some((edit) => !(edit.old_string ?? "").includes(CR));
   // Creating a file: its first replacement is the whole initial content.
-  let text = current;
+  let text = current !== null && lfEdit ? current.replace(CRLF, LF) : current;
   let pending = edits;
   if (text === null) {
     text = pending[0]?.new_string ?? "";

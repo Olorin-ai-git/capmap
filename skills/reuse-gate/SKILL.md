@@ -88,6 +88,22 @@ challenge the plan.
 
 Then, and only then, planning may begin.
 
+### 4. Name the specification in the plan
+
+Every plan names the specification it implements on a line of its own, near the top:
+
+```markdown
+Spec: docs/superpowers/specs/2026-08-02-tenant-portal-design.md
+```
+
+The path may be relative to the plan or to the repository root, a Markdown link or in
+backquotes. The hook checks the gate record of exactly that file, so a plan without the
+line is blocked, and so is one whose specification is not the one gated. spec-kit's
+`plan.md` and `tasks.md` need no line: they implement the `spec.md` beside them. Write
+plans with `Write` or `Edit`, never through the shell: the hook cannot read which
+specification a shell-written plan names, and blocks it. A record is bound to the index it
+was scored against: after the index is rebuilt, run `capmap gate` again before planning.
+
 ## What each verdict permits
 
 - `REUSE` — import the target as it stands. The plan depends on it; it is not rewritten.

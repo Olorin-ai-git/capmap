@@ -8,7 +8,7 @@
  */
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,6 +44,13 @@ writeFileSync(join(root, "README.md"), "# r\n");
 
 const digest = (text) => `sha256:${createHash("sha256").update(text).digest("hex")}`;
 const SPEC_TEXT = "# Spec\n\n## Components\n\n- billing\n";
+// A plan names the specification it implements; the hook checks that file's record.
+const PLAN_TEXT = "# Plan\n\nSpec: specs/2026-08-02-demo-design.md\n\nSteps.\n";
+// Records are bound to the index the hook is configured with, as `capmap gate` writes them.
+const scanConfig = JSON.parse(readFileSync(join(CONFIG_DIR, SCAN_CONFIG_FILE), "utf8"));
+const INDEX_GENERATED_AT = JSON.parse(
+  readFileSync(resolve(CONFIG_DIR, "..", scanConfig.index.dir, "index.json"), "utf8"),
+).generatedAt;
 // What `capmap gate` writes: schema 2, bound to the specification's path and
 // content (CM-1), its component hash consistent with the components it lists.
 const record = (verdict) =>
@@ -51,7 +58,7 @@ const record = (verdict) =>
     schemaVersion: 2, specPath: spec, feature: "demo",
     componentsHash: digest(JSON.stringify(["billing"])),
     specContentHash: digest(SPEC_TEXT.trimEnd()),
-    componentsSource: "document", generatedAt: "a", indexGeneratedAt: "b",
+    componentsSource: "document", generatedAt: "a", indexGeneratedAt: INDEX_GENERATED_AT,
     staleRepos: [],
     components: [{ name: "billing", verdict, target: "t", score: 0.9,
       bestCandidate: null, verifiedSha: "s", failedChecks: [], competing: [],
@@ -105,7 +112,8 @@ const cases = [
   ["no record",  "new specification",              null,         write(join(root, "specs", "2099-01-01-new-design.md"), "# Spec\n"), 0],
   ["no record",  "new PLAN",                       null,         write(join(root, "plans", "2099-01-01-ungated.md"), "# Plan\n"),   2],
   ["no record",  "existing specification",         null,         write(spec, "# Spec\n\n## Components\n\n- billing\n"),             2],
-  ["resolved",   "plan",                           "REUSE",      write(plan, "# Plan\n\nSteps.\n"),                                 0],
+  ["resolved",   "plan",                           "REUSE",      write(plan, PLAN_TEXT),                                            0],
+  ["resolved",   "plan naming no specification",   "REUSE",      write(plan, "# Plan\n\nSteps.\n"),                                 2],
   ["resolved",   "specification unchanged",        "REUSE",      write(spec, "# Spec\n\n## Components\n\n- billing\n"),             0],
   ["resolved",   "prose-only edit",                "REUSE",      edit(spec, "# Spec", "# Specification"),                           0],
   ["resolved",   "path outside the globs",         "REUSE",      write(join(root, "README.md"), "# r\n"),                           0],
@@ -113,11 +121,11 @@ const cases = [
   ["resolved",   "narrow edit changes a component","REUSE",      edit(spec, "- billing", "- auth"),                                 2],
   ["resolved",   "component section deleted",      "REUSE",      write(spec, "# Spec\n\nprose only\n"),                             2],
   ["resolved",   "edit that cannot be rebuilt",    "REUSE",      { tool_name: "Edit", tool_input: { file_path: spec, new_string: "- x" } }, 2],
-  ["unresolved", "plan",                           "UNRESOLVED", write(plan, "# Plan\n"),                                           2],
+  ["unresolved", "plan",                           "UNRESOLVED", write(plan, PLAN_TEXT),                                            2],
   ["unresolved", "specification",                  "UNRESOLVED", write(spec, "# Spec\n\n## Components\n\n- billing\n"),             2],
   // The audit's bypasses (CM-1, CM-4): a hand-written record, writing the
   // record directly, and a plan written by a shell redirect.
-  ["forged",     "plan under a hand-written record","FORGED",    write(plan, "# Plan\n"),                                           2],
+  ["forged",     "plan under a hand-written record","FORGED",    write(plan, PLAN_TEXT),                                            2],
   ["resolved",   "Write to the gate record",       "REUSE",      write(join(root, ".capmap", "gate-demo.json"), "{}"),              2],
   ["no record",  "plan by Bash redirect",          null,         bash("cat > plans/2099-01-01-ungated.md <<'EOF'\n# Plan\nEOF"),   2],
 ];

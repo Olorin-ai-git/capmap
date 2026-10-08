@@ -86,7 +86,7 @@ async function scenario(): Promise<{ root: string; env: NodeJS.ProcessEnv }> {
   await mkdir(join(root, "plans"), { recursive: true });
   await writeFile(
     join(root, "plans", "2026-08-02-tenant-portal.md"),
-    "# Plan\n",
+    `# Plan\n\nSpec: ${SPEC_FILE}\n`,
   );
   await writeFile(join(root, "README.md"), "# readme\n");
   await mkdir(join(root, "specs"), { recursive: true });
@@ -102,13 +102,17 @@ async function scenario(): Promise<{ root: string; env: NodeJS.ProcessEnv }> {
       hook: {
         specGlobs: ["**/specs/**"],
         planGlobs: ["**/plans/**"],
+        exemptGlobs: [],
+        deadlineMs: 5000,
+        maxShellWords: 4096,
+        maxShellPaths: 10000,
       },
       index: { dir: "index" },
     }),
   );
   await writeFile(
     join(configRoot, "index", "index.json"),
-    JSON.stringify({ schemaVersion: 1 }),
+    JSON.stringify({ schemaVersion: 1, generatedAt: RESOLVED_RECORD.indexGeneratedAt }),
   );
 
   return { root, env: { CAPMAP_CONFIG_DIR: join(configRoot, "config") } };
@@ -293,7 +297,7 @@ describe("component changes in the pending write", () => {
     const { root, env } = await scenario();
     const result = await invokeWithContent(
       join(root, "plans", "2099-01-01-ungated.md"),
-      "# Plan\n\nBuild all of it from scratch.\n",
+      `# Plan\n\nSpec: ${SPEC_FILE}\n\nBuild all of it from scratch.\n`,
       env,
     );
     expect(result.code).toBe(EXIT_BLOCK);
