@@ -1,5 +1,6 @@
 import { access } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { deriveFeatureId } from "./feature-id.js";
 
 /**
  * Which specification a plan implements.
@@ -19,6 +20,9 @@ const ANGLED = /^<([^>]+)>/;
 const BARE = /^(\S+)/;
 const SPEC_KIT_PLAN = /^(plan|tasks)\.md$/i;
 const SPEC_KIT_SPEC = "spec.md";
+/** `plan-foo.md`, `implementation-foo.md`: the role in front of the feature rather than behind it. */
+const LEADING_ROLE = /^(plan|implementation)[-_]/i;
+const NAME_BREAK = /^[-_]/;
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -54,4 +58,16 @@ export async function namedSpec(planAbs: string, text: string | null, repoRoot: 
   const candidates = [resolve(dirname(planAbs), reference), resolve(repoRoot, reference)];
   for (const candidate of candidates) if (await exists(candidate)) return candidate;
   return candidates[0] ?? null;
+}
+
+/**
+ * Whether the plan is filed under the feature of the specification it names:
+ * its feature id is the specification's, or starts with it at a `-` or `_`
+ * (`foo-implementation`, `foo-plan-v2`). Otherwise a plan for a feature gated
+ * UNRESOLVED could name any cleanly gated specification and clear on its record.
+ */
+export function filedUnder(planAbs: string, specAbs: string): boolean {
+  const plan = deriveFeatureId(planAbs).replace(LEADING_ROLE, "").toLowerCase();
+  const spec = deriveFeatureId(specAbs).toLowerCase();
+  return plan === spec || (plan.startsWith(spec) && NAME_BREAK.test(plan.slice(spec.length)));
 }

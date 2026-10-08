@@ -1,6 +1,8 @@
+import { basename } from "node:path";
 import type { Command } from "./shell-lex.js";
 import type { Dirs } from "./shell-dirs.js";
-import { positional, programOf, type Program } from "./shell-programs.js";
+import { SHELLS } from "./shell-input.js";
+import { CAPMAP_NAME, CAPMAP_SCRIPT, WRAPPERS, positional, programOf, type Program } from "./shell-programs.js";
 
 /** What a command's words say about it beyond the paths it names, and the walk's shapes. */
 
@@ -68,6 +70,46 @@ export function taintsNames(script: string, commands: Command[]): boolean {
 export function resolves(tokens: string[]): boolean {
   const gate = tokens.indexOf(GATE_WORD);
   return gate !== -1 && tokens.slice(gate + 1).some((token) => RESOLVE_OPTION.test(token));
+}
+
+/** A word naming capmap: `capmap`, a path to it, or its built entry point. */
+export const namesCapmap = (word: string): boolean => basename(word) === CAPMAP_NAME || CAPMAP_SCRIPT.test(word);
+
+/** A word whose value only the shell knows: a substitution, a parameter, a glob, or find's `{}`. */
+const COMPUTED = /[$*?[]/;
+const FOUND_FILE = "{}";
+
+/**
+ * `capmap gate` whose arguments the hook cannot read: a word the shell
+ * computes (`$(echo --resolve)`, `--re$(…)`, `$R`, `--res*`), or capmap run by
+ * another program that may add arguments (`xargs`, `script`, `find -exec … {}`).
+ * Any of them may be `--resolve`, which only the operator answers.
+ */
+export function gateArgumentsUnknown(words: string[], prog: Program): boolean {
+  const at = words.findIndex(namesCapmap);
+  const gate = at === -1 ? -1 : words.indexOf(GATE_WORD, at + 1);
+  if (gate === -1) return false;
+  const runBy = !prog.capmap && !SHELLS.has(prog.program ?? "");
+  return runBy || words.slice(gate + 1).some((word) => COMPUTED.test(word) || word === FOUND_FILE);
+}
+
+/** Builtins that set, export, remove or load variables. */
+const ENVIRONMENT_BUILTINS = new Set([
+  "export", "declare", "typeset", "local", "readonly", "unset", "setenv", "unsetenv", "source", ".", "eval",
+]);
+/** `set -a` / `set -o allexport` export every later assignment. */
+const ALLEXPORT = /^(-[a-zA-Z]*a[a-zA-Z]*|allexport)$/;
+
+/**
+ * The command changes the environment of what runs after it or through it: an
+ * assignment, `export`/`unset`/`source`…, `set -a`, or a wrapper with options
+ * (`env -u`, `env -i`). The gate's own CAPMAP_CONFIG_DIR is checked apart.
+ */
+export function changesEnvironment(words: string[]): boolean {
+  const { program, args, assigned } = programOf(words, false);
+  if (assigned.length > 0 || ENVIRONMENT_BUILTINS.has(program ?? "")) return true;
+  if (program === "set" && args.some((arg) => ALLEXPORT.test(arg))) return true;
+  return words.some((word, k) => WRAPPERS.has(word) && (words[k + 1] ?? "").startsWith("-"));
 }
 
 /** The patch files a `patch`, `git apply` or `git am` reads, or null when it patches nothing. */

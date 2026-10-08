@@ -296,7 +296,7 @@ describe("component changes in the pending write", () => {
     // was allowed for every guarded path rather than for specifications only.
     const { root, env } = await scenario();
     const result = await invokeWithContent(
-      join(root, "plans", "2099-01-01-ungated.md"),
+      join(root, "plans", "2099-01-01-tenant-portal.md"),
       `# Plan\n\nSpec: ${SPEC_FILE}\n\nBuild all of it from scratch.\n`,
       env,
     );

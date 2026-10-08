@@ -2,7 +2,7 @@
 import { access } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BYPASS_ENV_VAR, BYPASS_VALUE } from "./decide.js";
 import { bashAnalysis } from "./bash-targets.js";
@@ -67,8 +67,8 @@ async function run(configDir: string, bypass: boolean): Promise<number> {
   const library = dirname(createRequire(join(hookPackage, PACKAGE_FILE)).resolve(`${GLOB_LIBRARY}/${PACKAGE_FILE}`));
   const ctx: Context = {
     protectedDirs: await Promise.all(
-      [configDir, resolve(configDir, "..", config.index.dir), HOOK_DIR, join(hookPackage, PACKAGE_FILE), library]
-        .map(canonical),
+      [configDir, resolve(configDir, "..", config.index.dir), HOOK_DIR, join(hookPackage, PACKAGE_FILE), library,
+        process.execPath, ...(isAbsolute(process.argv0) ? [process.argv0] : [])].map(canonical),
     ),
     bypass,
     isSpec: matcher(config.hook.specGlobs),
@@ -76,6 +76,17 @@ async function run(configDir: string, bypass: boolean): Promise<number> {
     isExempt: matcher(config.hook.exemptGlobs),
     indexGeneratedAt: await indexGeneratedAt(resolve(configDir, "..", config.index.dir, MANIFEST_FILE)),
   };
+  // Started as `node …`, the shell looked the interpreter up on PATH, where a
+  // writable directory ahead of the real one can hold a `node` that never runs this hook.
+  if (!isAbsolute(process.argv0)) {
+    const decision = blockUnlessBypassed(
+      ctx,
+      `Deciding with an interpreter found on PATH (${process.argv0}); register the hook with node's absolute path —`,
+      process.argv0,
+    );
+    process.stderr.write(`${decision.allow ? decision.warning : decision.reason}${LINE_TERMINATOR}`);
+    if (!decision.allow) return EXIT_BLOCK;
+  }
   const shell = {
     home: homedir(),
     cdpath: (process.env[CDPATH_ENV_VAR] ?? "") !== "",
@@ -88,7 +99,8 @@ async function run(configDir: string, bypass: boolean): Promise<number> {
   if (payload.tool_name === BASH_TOOL && bashAnalysis(command, { ...shell, cwd }).operator) {
     const decision = blockUnlessBypassed(
       ctx,
-      `Running "capmap gate --resolve" from an agent (it is answered by the operator, at a terminal)`,
+      `Running "capmap gate --resolve", or "capmap gate" with arguments the hook cannot read, from an agent ` +
+        `(resolution is answered by the operator, at a terminal)`,
       command,
     );
     process.stderr.write(`${decision.allow ? decision.warning : decision.reason}${LINE_TERMINATOR}`);

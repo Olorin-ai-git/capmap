@@ -16,7 +16,7 @@ const KEYWORDS = new Set([
   "case", "esac", "time", "!", "{", "}", "coproc",
 ]);
 /** Run the rest of their words as a command. Their options are not parsed: one makes the command unknown. */
-const WRAPPERS = new Set(["exec", "env", "command", "builtin", "nice", "nohup", "time", "sudo"]);
+export const WRAPPERS = new Set(["exec", "env", "command", "builtin", "nice", "nohup", "time", "sudo"]);
 /** Run a program found through node_modules, where a reader's name may be anything. */
 const PACKAGE_RUNNERS = new Set(["npx", "pnpm"]);
 export const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*\+?=/;
@@ -51,8 +51,8 @@ export const DESTINATION_WRITERS = new Set(["cp", "install", "rsync", "scp", "di
 export const ALL_ARGUMENT_WRITERS = new Set(["mv", "ln"]);
 const TARGET_DIRECTORY = /^(-t|--target-directory)(=|$)/;
 /** `capmap` itself reads specifications and writes only its own gate records; `./capmap` may be anything. */
-const CAPMAP_NAME = "capmap";
-const CAPMAP_SCRIPT = /capmap-cli\/dist\/bin\.js$/;
+export const CAPMAP_NAME = "capmap";
+export const CAPMAP_SCRIPT = /capmap-cli\/dist\/bin\.js$/;
 /** Splits a word once more, for scripts passed as one argument (`node -e`, `sh -c`). */
 export const PIECE_BREAK = /[\s'"`=(),;:<>|&{}[\]]+/;
 /** Characters of code rather than prose; a word with blanks and none of them is a sentence. */

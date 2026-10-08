@@ -104,6 +104,24 @@ function isCopiedVerdictRow(line: string, declared: Set<string>): boolean {
   return declared.has(normalise([name])[0] ?? "") && VERDICT_WORDS.has(verdict);
 }
 
+/**
+ * The cells of each copied verdict row (header and separator aside). Their
+ * values are exempt from the content hash, so the hook holds them to the record.
+ */
+export function copiedVerdictRows(markdown: string): string[][] {
+  const text = unixLines(markdown);
+  const heading = VERDICTS_HEADING.exec(text);
+  if (heading === null) return [];
+  const declared = new Set(normalise(extractComponents(markdown) ?? []));
+  const after = text.slice(heading.index + heading[0].length);
+  const next = NEXT_HEADING.exec(after);
+  return (next === null ? after : after.slice(0, next.index))
+    .split("\n")
+    .filter((line) => isCopiedVerdictRow(line, declared))
+    .map((line) => (TABLE_ROW.exec(line)?.[1] ?? "").split("|").map((cell) => cell.trim()))
+    .filter((cells) => !SEPARATOR_ROW.test(cells.join("|")) && !HEADER_CELL.test(cells[0] ?? ""));
+}
+
 /** Digest binding a gate record to its specification; see the core copy. */
 export function specContentHash(markdown: string): string {
   let text = unixLines(markdown);

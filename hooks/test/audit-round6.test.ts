@@ -102,8 +102,8 @@ describe("round 6, High: directory moves and copies carry their files", () => {
     await mkdir(join(root, "scratch"));
     const decoyText = "# Decoy\n\n## Components\n\n- banner\n";
     await writeFile(join(root, "scratch", "foo.md"), decoyText);
-    // The decoy lands on a specification path whose feature is gated for another file.
-    expect(await invoke(bash("mkdir -p decoy && mv scratch decoy/specs", root))).toBe(BLOCK);
+    // A new specification of a gated feature id may be created (round 7); it has no record of its own.
+    expect(await invoke(bash("mkdir -p decoy && mv scratch decoy/specs", root))).toBe(ALLOW);
     // Gated anyway, it may not replace the real specification's record, and the plan names the real one.
     await putRecord(root, genuineRecord(root, decoyText, {
       spec: join(root, "decoy", "specs", "foo.md"), names: ["banner"], verdict: "BUILD",

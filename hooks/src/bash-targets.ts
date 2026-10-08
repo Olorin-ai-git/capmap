@@ -1,4 +1,4 @@
-import { basename, join, resolve } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { lex, type Command } from "./shell-lex.js";
 import {
   ALL_ARGUMENT_WRITERS, DESTINATION_WRITERS, PIECE_BREAK, destinations, pieces, places, positional, programOf,
@@ -8,7 +8,8 @@ import { inputRole, mayBeScript, SHELLS } from "./shell-input.js";
 import { absolutes, changeDir, chdirs, unknown, type Dirs } from "./shell-dirs.js";
 import { expandGlob, patchPaths, readRegular, tree } from "./shell-fs.js";
 import {
-  patchFiles, resolves, taintsNames, type BashAnalysis, type ShellContext, type Step,
+  changesEnvironment, gateArgumentsUnknown, namesCapmap, patchFiles, resolves, taintsNames,
+  type BashAnalysis, type ShellContext, type Step,
 } from "./shell-traits.js";
 
 export type { ShellContext } from "./shell-traits.js";
@@ -59,7 +60,9 @@ class Walker {
     const into = dests.flatMap((dest) => this.all(dest, dirs));
     for (const source of positional(args).filter((arg) => !dests.includes(arg))) {
       for (const src of this.all(source, dirs)) {
-        const inside = tree(src, this.ctx.maxPaths) ?? [];
+        // What it holds now, and what this command wrote into it first.
+        const written = [...this.paths].filter((path) => path.startsWith(src + sep)).map((path) => relative(src, path));
+        const inside = [...(tree(src, this.ctx.maxPaths) ?? []), ...written];
         for (const rel of inside) {
           if (moves) this.paths.add(join(src, rel));
           for (const dest of into) this.paths.add(join(dest, rel)).add(join(dest, basename(src), rel));
@@ -133,7 +136,11 @@ class Walker {
     // A reader's words are data (`git commit -m "…--resolve"`); any other program may run them.
     const reads = prog.trusted && prog.program !== undefined && readsOnly(prog.program, prog.args);
     const tokens = reads ? cmd.words : cmd.words.flatMap((word) => word.split(PIECE_BREAK));
-    this.operator ||= resolves(tokens);
+    this.operator ||= resolves(tokens) || (!reads && gateArgumentsUnknown(cmd.words, prog));
+    this.configuration(cmd);
+  }
+
+  private configuration(cmd: Command): void {
     for (const word of cmd.words) {
       const value = CONFIG_ASSIGNMENT.exec(word)?.[1];
       if (value !== undefined && !this.ctx.configDirs.includes(resolve(this.ctx.cwd, value))) {
@@ -142,11 +149,25 @@ class Walker {
     }
   }
 
+  /**
+   * capmap's model endpoint, estate root and runtime come from its environment
+   * (ANTHROPIC_BASE_URL, CAPMAP_ROOT, NODE_OPTIONS…): a script that changes it
+   * may not run capmap, or capmap itself would write a record steered by the agent.
+   */
+  private environment(commands: Command[]): void {
+    if (!commands.some((cmd) => cmd.words.flatMap((w) => w.split(PIECE_BREAK)).some(namesCapmap))) return;
+    commands.forEach((cmd) => this.configuration(cmd));
+    if (commands.some((cmd) => changesEnvironment(cmd.words))) {
+      throw new Error("capmap may run only in the environment the session gave it; this command changes it");
+    }
+  }
+
   /** Records what the script may write, returning the directories it may end in. */
   walk(script: string, start: Dirs, inherited: boolean, guessing: boolean): Dirs {
     const { commands, unmodelled } = lex(script, this.ctx.maxWords);
     const taint = inherited || unmodelled || taintsNames(script, commands);
     const cdpath = this.ctx.cdpath || commands.some((cmd) => cmd.words.some((w) => CDPATH_ASSIGNMENT.test(w)));
+    if (!guessing) this.environment(commands);
     let dirs = start;
     let upstream: string[] = [];
     for (const cmd of commands) {

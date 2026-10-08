@@ -54,7 +54,7 @@ describe("round 4, High: a plan is bound to the specification it names", () => {
     expect(await invoke(write(join(root, "plans", "bar-plan.md"), PLAN_TEXT))).toBe(BLOCK);
     await putRecord(root, genuineRecord(root));
     await writeFile(join(root, "specs", "foo.md"), SPEC_TEXT);
-    expect(await invoke(write(join(root, "plans", "anything.md"), "**Spec**: [foo](../specs/foo.md)\n"))).toBe(ALLOW);
+    expect(await invoke(write(join(root, "plans", "foo-anything.md"), "**Spec**: [foo](../specs/foo.md)\n"))).toBe(ALLOW);
   });
 
   it("blocks a plan written through the shell, whose content it cannot read", async () => {

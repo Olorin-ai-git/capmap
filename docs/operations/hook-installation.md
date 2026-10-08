@@ -36,7 +36,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "CAPMAP_CONFIG_DIR=/path/to/capability-map/config node /path/to/capability-map/hooks/dist/gate-hook.js || exit 2"
+            "command": "CAPMAP_CONFIG_DIR=/path/to/capability-map/config /absolute/path/to/node /path/to/capability-map/hooks/dist/gate-hook.js || exit 2"
           }
         ]
       }
@@ -44,6 +44,12 @@ Add to `~/.claude/settings.json`:
   }
 }
 ```
+
+Name `node` by its absolute path (`command -v node` prints it). A bare `node` is
+looked up on `PATH`, where a writable directory ahead of the real one can hold a
+`node` that never runs the hook; the hook therefore blocks every write when it
+was started through a `PATH` lookup, and guards the interpreter it runs on like
+its own code.
 
 The trailing `|| exit 2` is part of the registration. Claude Code treats any
 exit other than 2 as non-blocking, so a hook that cannot even start — its code
@@ -74,17 +80,21 @@ files: a FIFO or device in their place is refused, not waited on.
 | Plan that names no specification (no `Spec: <path>` line; spec-kit's `plan.md`/`tasks.md` name the `spec.md` beside them) | block |
 | Plan written through the shell, or by an edit the hook cannot rebuild | block — it cannot read which specification the plan names |
 | Plan whose named specification's record was gated from another file, or scored against an index other than the configured one | block |
-| Path matching `hook.exemptGlobs` (Claude Code's `~/.claude/plans/*.md`) | allow |
+| Plan filed under another feature than the specification it names (`plans/foo-plan.md` naming `specs/bar.md`) | block |
+| New specification whose feature id another specification's record already holds | allow — it has no record of its own, and `capmap gate` asks for a rename |
+| Path matching `hook.exemptGlobs` (Claude Code's `~/.claude/plans/*.md`), both as written and where its links lead | allow |
 | Path matching **both** glob sets | both rules apply; the stricter one wins |
 | Existing file, no gate record            | block, pointing at `capmap gate <path>`                       |
 | Gate record malformed, or gates no components, or its hash disagrees with its components | block |
 | Specification write under a record gated from another file | block |
-| Plan write whose specification changed since the gate ran (the table rows of a `## Reuse Verdicts` section excepted) | block, asking for a re-run |
+| Plan write whose specification changed since the gate ran (the table rows of a `## Reuse Verdicts` section excepted, when each row repeats the record's verdict, target, score and note) | block, asking for a re-run |
 | Plan write whose record came from a file outside `hook.specGlobs`, or gated components other than its specification's `## Components` | block |
 | Any write to a `.capmap/` directory, including through a symbolic link | block — records are written only by `capmap gate` |
 | Any write to the configuration directory, the index directory, the hook's own code, its `package.json` or `picomatch` | block — they steer or disable the gate |
 | `capmap` run with `CAPMAP_CONFIG_DIR` set to anything but the hook's own | block |
-| `capmap gate --resolve` run through the Bash tool | block — resolution is answered by the operator at a terminal |
+| `capmap` run by a command that changes the environment (an assignment, `export`, `unset`, `source`, `set -a`, `env -u`/`-i`, …) | block — `ANTHROPIC_BASE_URL`, `CAPMAP_ROOT` or `NODE_OPTIONS` steer what capmap itself writes |
+| `capmap gate --resolve` run through the Bash tool, or `capmap gate` with an argument computed at run time (`$(…)`, `$X`, a glob, `{}`) or run by another program (`xargs`, `script`, `find -exec`) | block — resolution is answered by the operator at a terminal |
+| The hook started through a `PATH` lookup (`node`, not its absolute path) | block every write |
 | Configured, but the hook itself errors | block |
 | Component set changed since the gate ran | block, asking for a re-run                                    |
 | Any component `UNRESOLVED`               | block, printing the verdict table                             |
@@ -93,12 +103,19 @@ files: a FIFO or device in their place is refused, not waited on.
 Globs are configured in `config/scan.config.json` and match case-insensitively,
 including inside dot directories such as `.claude/worktrees`. Specifications are
 Markdown under `specs/` or `docs/superpowers/specs/`. Plans cover
-`**/plans/**`, `plan*`, `*-plan*`, `*_plan*` and `*implementation*` Markdown under
-`docs/`, and spec-kit's `plan.md` and `tasks.md` under `specs/`. A plan is bound
-to the specification it names, not to its own file name: the record checked is
-the named specification's, so a plan cannot borrow the record of a trivially
-gated namesake, and `capmap gate` refuses to replace a record that another
-existing specification of the same feature id holds.
+`**/plans/**`; Markdown under `docs/` named `plan`, `implementation`, or with
+`plan` or `implementation` as a whole `-`/`_`-separated part of the name
+(`foo-plan.md`, `plan-foo.md`, `foo_implementation_v2.md`, but not
+`control-plane.md` or `planner.md`); and spec-kit's `plan.md` and `tasks.md`
+under `specs/`. A plan is bound to the specification it names and to its own
+feature: the record checked is the named specification's, and the plan's feature
+id (its name, as for specifications, with a leading `plan-` dropped) must be that
+specification's or begin with it at a `-` or `_` (`foo-implementation-plan.md`
+for `foo`). A plan for an UNRESOLVED feature therefore cannot clear on another
+feature's clean record, and `capmap gate` refuses to replace a record that another
+existing specification of the same feature id holds. What the hook cannot read is
+whether a plan's text implements the specification it names: a plan filed under
+another, cleanly gated feature's name is a plan for that feature.
 
 ### Shell commands
 
@@ -156,19 +173,27 @@ hook can reconstruct), and a plan cannot be written through it at all. Every
 path is decided after symbolic links are resolved. `capmap gate --resolve` is
 refused wherever its words appear as a command's, however quoted or wrapped
 (`script`, `env -u`, a renamed link, `node -e`), but not inside a reader's
-arguments (`git commit -m "…"`, `grep -- --resolve`).
+arguments (`git commit -m "…"`, `grep -- --resolve`); so is `capmap gate` with an
+argument only the shell knows or another program supplies. capmap reads its
+model endpoint, estate root and runtime from the environment, so a command that
+changes the environment may not run capmap.
 
 This is lexical, not a shell. The lexer models bash and the zsh constructs that
 carry commands; Claude Code on macOS runs commands in zsh, and any zsh syntax
 outside that model is a gap of the same kind. Not seen: paths assembled at run
 time (`$DIR/plan.md`, `printf '%s' … | sh`, encoded text), and anything a file the
-agent wrote earlier does when it runs — a script, a function or `PATH` entry in a
-shell profile, git configuration, hooks or objects (`git checkout`, `git stash
+agent wrote earlier does when it runs — a script, a function, `PATH` entry or
+exported variable (`ANTHROPIC_BASE_URL`, `CAPMAP_ROOT`) in a shell profile, git configuration, hooks or objects (`git checkout`, `git stash
 pop`), an archive (`tar x`), a package in `node_modules`, or a rebuilt capmap.
 Gate records carry no proof of authorship an agent cannot reproduce, so each such
-gap is a way to forge one. Closing the class needs an anchor outside the agent's
-reach — a record signed with a key the agent cannot read, or an operating-system
-write guard on `.capmap/` — which this hook does not provide.
+gap is a way to forge one. A signed record or an operating-system write guard on
+`.capmap/` would not close it either: capmap itself writes the record, and an
+agent that controls capmap's environment or its terminal steers what it writes.
+`capmap gate --resolve` checks for an interactive terminal outside an agent
+session, which an agent with a shell can imitate (a pseudo-terminal, the session
+variables unset) from a script file the hook cannot read. Closing the class needs
+capmap and its operator prompt to run where the agent cannot reach — another
+user account or machine — which this hook does not provide.
 
 ## Bypassing
 

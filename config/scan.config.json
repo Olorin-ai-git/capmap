@@ -82,12 +82,16 @@
     ],
     "planGlobs": [
       "**/plans/**",
-      "**/docs/**/plan*.md",
-      "**/docs/**/*-plan*.md",
-      "**/docs/**/*_plan*.md",
-      "**/docs/**/*implementation*.md",
-      "**/specs/**/plan*.md",
-      "**/specs/**/tasks*.md"
+      "**/docs/**/plan.md",
+      "**/docs/**/plan[-_]*.md",
+      "**/docs/**/*[-_]plan.md",
+      "**/docs/**/*[-_]plan[-_]*.md",
+      "**/docs/**/implementation.md",
+      "**/docs/**/implementation[-_]*.md",
+      "**/docs/**/*[-_]implementation.md",
+      "**/docs/**/*[-_]implementation[-_]*.md",
+      "**/specs/**/plan.md",
+      "**/specs/**/tasks.md"
     ],
     "exemptGlobs": [
       "**/.claude/plans/*.md"

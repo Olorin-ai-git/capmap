@@ -65,10 +65,12 @@ describe("namedSpec", () => {
 describe("evaluate", () => {
   it("binds a plan to the record of the specification it names", async () => {
     const dir = await root();
-    const plan = join(dir, "plans", "bar-plan.md");
+    const plan = join(dir, "plans", "foo-plan.md");
     expect((await evaluate(write(plan, "Spec: specs/foo.md"), context())).allow).toBe(false);
     await gate(dir, genuineRecord(dir));
     expect(await evaluate(write(plan, "Spec: specs/foo.md"), context())).toEqual({ allow: true, warning: null });
+    // Filed under another feature, it does not clear on foo's record.
+    expect((await evaluate(write(join(dir, "plans", "bar-plan.md"), "Spec: specs/foo.md"), context())).allow).toBe(false);
     expect((await evaluate(write(plan, "# no line"), context())).allow).toBe(false);
     expect((await evaluate(write(plan, null), context())).allow).toBe(false);
     expect((await evaluate(write(plan, "Spec: specs/foo.md"), context({ indexGeneratedAt: "other" }))).allow).toBe(false);

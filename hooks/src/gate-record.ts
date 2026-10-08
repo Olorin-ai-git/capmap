@@ -1,8 +1,9 @@
-import { realpath } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join } from "node:path";
+import { readlink, realpath } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type { GateRecord } from "@capmap/core";
 import { componentsHash, extractComponents, specContentHash } from "./components-hash.js";
 import { readRegularFile } from "./read-regular.js";
+import { verdictRowsProblem } from "./verdict-rows.js";
 
 /**
  * A dependency-free validator for gate records, plus the checks that bind a
@@ -20,6 +21,8 @@ const HASH = /^sha256:[0-9a-f]{64}$/;
 const VERDICTS = new Set(["REUSE", "EXTEND", "REFERENCE", "BUILD", "UNRESOLVED"]);
 const SOURCES = new Set(["document", "flags"]);
 const GATE_DIR_SEGMENT = /(^|[\\/])\.capmap([\\/]|$)/i;
+/** Links followed through dangling ends before a path is taken as written; the kernel stops at 32 or 40. */
+const MAX_LINK_HOPS = 40;
 
 type Fields = Record<string, unknown>;
 const isString = (v: unknown): v is string => typeof v === "string";
@@ -110,12 +113,19 @@ export function parseGateRecord(
 export async function canonical(path: string): Promise<string> {
   let existing = path;
   let rest = "";
-  for (;;) {
+  for (let hops = 0; ; ) {
     try {
       return join(await realpath(existing), rest);
     } catch {
+      // A dangling link still decides where a write lands: the write creates its target.
+      const target = await readlink(existing).catch(() => null);
+      if (target !== null && hops < MAX_LINK_HOPS) {
+        hops += 1;
+        existing = resolve(dirname(existing), target);
+        continue;
+      }
       const parent = dirname(existing);
-      if (parent === existing) return path;
+      if (parent === existing) return join(existing, rest);
       rest = join(basename(existing), rest);
       existing = parent;
     }
@@ -165,7 +175,8 @@ export async function bindingProblem(
     return `its specification ${record.specPath} changed after the gate ran`;
   }
   const declared = extractComponents(text);
-  return declared === null || componentsHash(declared) === record.componentsHash
-    ? null
-    : `it gated components other than the ones ${record.specPath} declares`;
+  if (declared !== null && componentsHash(declared) !== record.componentsHash) {
+    return `it gated components other than the ones ${record.specPath} declares`;
+  }
+  return verdictRowsProblem(text, record);
 }

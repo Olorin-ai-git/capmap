@@ -80,7 +80,8 @@ Re-run the command until the exit code is `0`.
 ### 3. Write the verdicts into the specification
 
 Copy the verdict table from the record verbatim into a `## Reuse Verdicts` section of the
-specification — component, verdict, target, score, verified commit. Do not paraphrase,
+specification as a Markdown table — component, verdict, target, score, note — one row per
+component, each cell exactly as `capmap gate` printed it. Do not paraphrase,
 round scores, or omit `BUILD` rows. Put only the table in that section: its table rows
 are the one part of the specification the record's binding ignores, so any other text
 there counts as a change and needs a re-run. The section is the audit trail a reader uses to
@@ -98,7 +99,9 @@ Spec: docs/superpowers/specs/2026-08-02-tenant-portal-design.md
 
 The path may be relative to the plan or to the repository root, a Markdown link or in
 backquotes. The hook checks the gate record of exactly that file, so a plan without the
-line is blocked, and so is one whose specification is not the one gated. spec-kit's
+line is blocked, and so is one whose specification is not the one gated. Name the plan
+after its specification: its feature id (the file name without date, `-plan` or `-design`)
+must be the specification's, or begin with it (`tenant-portal-implementation.md`). spec-kit's
 `plan.md` and `tasks.md` need no line: they implement the `spec.md` beside them. Write
 plans with `Write` or `Edit`, never through the shell: the hook cannot read which
 specification a shell-written plan names, and blocks it. A record is bound to the index it

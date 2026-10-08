@@ -4,7 +4,7 @@ import { BYPASS_ENV_VAR, BYPASS_VALUE, decide, type Decision } from "./decide.js
 import { deriveFeatureId } from "./feature-id.js";
 import { bindingProblem, canonical, isGateRecordPath, parseGateRecord } from "./gate-record.js";
 import { AMBIGUOUS_EDIT_HASH, pendingDocument, pendingHash } from "./pending-document.js";
-import { namedSpec } from "./plan-spec.js";
+import { filedUnder, namedSpec } from "./plan-spec.js";
 import { readRegularFile } from "./read-regular.js";
 import type { Target } from "./payload.js";
 
@@ -84,6 +84,14 @@ async function decidePlan(target: Target, fileAbs: string, ctx: Context): Promis
     );
   }
   const specAbs = await canonical(spec);
+  if (!filedUnder(fileAbs, specAbs)) {
+    return blockUnlessBypassed(
+      ctx,
+      `Writing a plan of feature "${deriveFeatureId(fileAbs)}" that names the specification of feature ` +
+        `"${deriveFeatureId(specAbs)}" (${spec}) — name the plan after the specification it implements —`,
+      fileAbs,
+    );
+  }
   const parsed = await recordFor(specAbs);
   const indexGeneratedAt = ctx.indexGeneratedAt ?? "";
   const problem =
@@ -114,21 +122,27 @@ export async function evaluate(target: Target, ctx: Context): Promise<Decision> 
   if (ctx.protectedDirs.some((dir) => within(dir, fileAbs))) {
     return blockUnlessBypassed(ctx, "Changing the reuse gate's configuration, index or hook", fileAbs);
   }
-  if (ctx.isExempt(raw) || ctx.isExempt(fileAbs)) return { allow: true, warning: null };
-  const isSpec = ctx.isSpec(raw) || ctx.isSpec(fileAbs);
-  const isPlan = ctx.isPlan(raw) || ctx.isPlan(fileAbs);
+  // An exempt name is exempt only where the write lands too: `.claude/plans/x.md`
+  // linked to `plans/foo-plan.md` writes a plan.
+  const guarded = [raw, fileAbs].filter((path) => !ctx.isExempt(path));
+  const isSpec = guarded.some(ctx.isSpec);
+  const isPlan = guarded.some(ctx.isPlan);
   if (!isSpec && !isPlan) return { allow: true, warning: null };
 
-  const own = isSpec ? await recordFor(fileAbs) : null;
+  const found = isSpec ? await recordFor(fileAbs) : null;
   const gatedItself =
-    own?.record !== null && own?.record !== undefined && (await canonical(own.record.specPath)) === fileAbs;
+    found?.record !== null && found?.record !== undefined && (await canonical(found.record.specPath)) === fileAbs;
+  const fileExists = await exists(fileAbs);
+  // A new specification that derives another one's feature id has no record of its
+  // own yet; it cannot borrow that one (plans are bound to the record's own file).
+  const own = found?.record !== null && found?.record !== undefined && !gatedItself && !fileExists ? null : found;
   // A plan is a plan unless it was itself gated as a specification: spec-kit's
   // plan.md lies under specs/ and implements the spec.md beside it.
   if (isPlan && !gatedItself) return decidePlan(target, fileAbs, ctx);
 
   return decide({
     filePath: fileAbs,
-    fileExists: await exists(fileAbs),
+    fileExists,
     isSpec,
     isPlan,
     record: own?.record ?? null,
