@@ -64,6 +64,17 @@ export async function runEval(deps: CommandDeps, opts: EvalOptions): Promise<num
   const set = await readLabels(deps, labelsAbs);
   if (set === null) return EXIT_ERROR;
 
+  // Checked before any model call: a refused output would discard a paid measurement.
+  const outAbs =
+    opts.outPath === null
+      ? labelsAbs.replace(JSON_SUFFIX, "") + RESULT_SUFFIX
+      : absolute(opts.outPath);
+  try {
+    assertPlacement(outAbs, deps.config);
+  } catch (error) {
+    deps.writer.line(String(error instanceof Error ? error.message : error));
+    return EXIT_ERROR;
+  }
   const context = await loadIndexContext(deps);
   const search = scoreSearchRecall({
     set,
@@ -110,16 +121,6 @@ export async function runEval(deps: CommandDeps, opts: EvalOptions): Promise<num
     );
   }
 
-  const outAbs =
-    opts.outPath === null
-      ? labelsAbs.replace(JSON_SUFFIX, "") + RESULT_SUFFIX
-      : absolute(opts.outPath);
-  try {
-    assertPlacement(outAbs, deps.config);
-  } catch (error) {
-    deps.writer.line(String(error instanceof Error ? error.message : error));
-    return EXIT_ERROR;
-  }
   const result = {
     measuredAt: deps.clock.now().toISOString(),
     labels: labelsAbs,

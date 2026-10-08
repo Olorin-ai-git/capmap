@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
-import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertPlacement, buildDeps } from "../src/composition.js";
@@ -101,5 +101,39 @@ describe("committed index", () => {
     for (const repo of manifest.repos) {
       expect(existsSync(join(repoRoot(), manifest.root, repo.path))).toBe(true);
     }
+  });
+});
+
+/**
+ * SP-3 audit round 5: paths were compared as strings. The same checkout named
+ * through a symlink, or with its case changed on a case-insensitive disk, was
+ * "outside", and a child named `..capmap-index` read as a parent.
+ */
+describe("placement compares the paths on disk", () => {
+  async function outsideConfig() {
+    const deps = await buildDeps({
+      CAPMAP_CONFIG_DIR: join(repoRoot(), "config"),
+      CAPMAP_ROOT: join(repoRoot(), "example", "estate"),
+    });
+    return { ...deps.config, root: await mkdtemp(join(tmpdir(), "capmap-real-estate-")) };
+  }
+
+  it("refuses a child of the checkout whose name starts with two dots", async () => {
+    const config = await outsideConfig();
+    expect(() => assertPlacement(join(repoRoot(), "..capmap-index"), config)).toThrow(/outside this checkout/);
+  });
+
+  it("refuses the checkout reached through a symlink", async () => {
+    const config = await outsideConfig();
+    const link = join(await mkdtemp(join(tmpdir(), "capmap-link-")), "checkout");
+    await symlink(repoRoot(), link);
+    expect(() => assertPlacement(join(link, "index"), config)).toThrow(/outside this checkout/);
+  });
+
+  it("refuses the checkout named in another case where the disk ignores case", async () => {
+    const config = await outsideConfig();
+    const swapped = repoRoot().replace(/[a-z]/i, (c) => (c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase()));
+    if (!existsSync(swapped)) return; // a case-sensitive disk: the swapped path is another directory
+    expect(() => assertPlacement(join(swapped, "index"), config)).toThrow(/outside this checkout/);
   });
 });

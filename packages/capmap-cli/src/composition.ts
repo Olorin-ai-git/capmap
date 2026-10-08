@@ -1,5 +1,6 @@
+import { realpathSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   loadConfig,
@@ -63,9 +64,29 @@ function defaultConfigDir(): string {
   return join(workspaceRoot(), CONFIG_DIR_NAME);
 }
 
+/**
+ * The path as the disk names it: symlinks resolved and, on a case-insensitive
+ * disk, the stored case. A path that does not exist yet keeps its missing tail
+ * under the canonical form of its nearest existing ancestor.
+ */
+function onDisk(pathAbs: string): string {
+  const tail: string[] = [];
+  let current = resolve(pathAbs);
+  for (;;) {
+    try {
+      return join(realpathSync.native(current), ...tail);
+    } catch {
+      const parent = dirname(current);
+      if (parent === current) return resolve(pathAbs);
+      tail.unshift(basename(current));
+      current = parent;
+    }
+  }
+}
+
 function isInside(parentAbs: string, childAbs: string): boolean {
-  const rel = relative(parentAbs, childAbs);
-  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+  const rel = relative(onDisk(parentAbs), onDisk(childAbs));
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
 /**
@@ -73,8 +94,8 @@ function isInside(parentAbs: string, childAbs: string): boolean {
  * that estate. When anything it reads lies outside this checkout (the estate
  * root or any configured repository), the output must not be written into the
  * checkout, where the next commit would publish it; only the bundled example
- * estate is indexed in place. Paths are compared lexically, so a symlink into
- * the checkout is not seen.
+ * estate is indexed in place. Paths are compared as the disk resolves them, so
+ * a symlink or a change of case cannot name the checkout as somewhere else.
  */
 export function assertPlacement(targetAbs: string, config: LoadedConfig): void {
   const checkout = workspaceRoot();

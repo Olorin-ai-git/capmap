@@ -93,6 +93,14 @@ describe("runEval (CM-7)", () => {
     expect(existsSync(out)).toBe(false);
   });
 
+  it("checks where it may write before paying for the gate (SP-3 audit)", async () => {
+    const { deps, labels } = await setup([SHORTLIST]);
+    deps.config = { ...deps.config, root: await mkdtemp(join(tmpdir(), "capmap-real-estate-")) };
+    const out = join(repoRoot(), "example", "sp3-placement-probe.result.json");
+    expect(await runEval(deps, { labelsPath: labels, outPath: out, gate: true })).toBe(1);
+    expect(deps.model.calls).toBe(0);
+  });
+
   it("rejects a malformed labelled set", async () => {
     const { deps, labels } = await setup([SHORTLIST]);
     await writeFile(labels, JSON.stringify({ cases: [{ component: "x", expected: "REUSE", target: null }] }));
