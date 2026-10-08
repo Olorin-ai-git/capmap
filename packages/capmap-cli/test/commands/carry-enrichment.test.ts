@@ -150,6 +150,25 @@ describe("carryEnrichment", () => {
   });
 
   /**
+   * SP-3 audit round 4: the guard was only tested with path AND kind changed
+   * together, so dropping either check alone stayed green. Each one decides.
+   */
+  it.each([
+    ["another npm package at a new path", { path: "alpha/packages/ui-kit-next" }],
+    ["a different kind at the same path", { kind: "py-subpackage" as const }],
+  ])("does not carry onto %s", async (_label, change) => {
+    const store = await storeWith({
+      packages: [pkg("alpha/ui-kit", true)],
+      domains: [{ ...domain, packages: ["alpha/ui-kit"] }],
+    });
+    const { packages, domains } = await carryEnrichment(store, "alpha", MAX_CHARS, [
+      { ...pkg("alpha/ui-kit", false), ...change },
+    ]);
+    expect(packages[0]!.summary).toBeNull();
+    expect(domains).toEqual([]);
+  });
+
+  /**
    * SP-3 audit: a summary stored before CM-8 (or written by hand) was carried
    * through every --no-enrich rescan to show, MCP and the ranker unsanitised.
    */
